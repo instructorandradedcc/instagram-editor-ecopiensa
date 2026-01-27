@@ -74,6 +74,8 @@
         
         button.primary { background: var(--accent); color: #000; font-weight: 600; border: none; }
         button.primary:hover:not(:disabled) { opacity: 0.9; }
+        
+        button.active-tool { background: rgba(0, 255, 157, 0.1); color: var(--accent); border-color: var(--accent); }
 
         /* --- Toolbar Left --- */
         .toolbar {
@@ -275,6 +277,7 @@
                 <span id="zoom-level" style="font-size: 0.8rem; width: 40px; text-align: right;">100%</span>
             </div>
 
+            <button id="safe-zone-btn" onclick="app.toggleSafeZone()" title="Mostrar/Ocultar Zona Segura"><i data-lucide="grid-3x3"></i> <span>Guías</span></button>
             <button onclick="app.toggleGridPreview()"><i data-lucide="smartphone"></i> <span>Vista Previa</span></button>
             <select id="export-format" style="width: auto;">
                 <option value="image/png">PNG</option>
@@ -884,6 +887,8 @@
                 this.isSelecting = false;
                 this.selectionStart = {x:0, y:0};
                 this.selectionRect = null; 
+                
+                this.showSafeZone = false; // State for Safe Zone Guide
 
                 this.lastMouse = { x: 0, y: 0 };
                 this.bgColor = '#1a1a1a';
@@ -1245,6 +1250,13 @@
                 container.style.transform = `scale(${this.zoom})`;
                 document.getElementById('zoom-level').innerText = Math.round(this.zoom * 100) + '%';
             }
+            
+            toggleSafeZone() {
+                this.showSafeZone = !this.showSafeZone;
+                const btn = document.getElementById('safe-zone-btn');
+                if(this.showSafeZone) btn.classList.add('active-tool');
+                else btn.classList.remove('active-tool');
+            }
 
             updatePropertiesPanel() {
                 const noSel = document.getElementById('no-selection-msg');
@@ -1446,6 +1458,37 @@
             drawUI(ctx) {
                 const cw = this.canvas.width;
                 const ch = this.canvas.height;
+                
+                // Safe Zone (Guides)
+                if (this.showSafeZone) {
+                    const margin = 60;
+                    ctx.save();
+                    ctx.strokeStyle = 'cyan';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([5, 5]);
+                    
+                    // Safe Margin Box
+                    ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
+                    
+                    // Rule of Thirds
+                    ctx.beginPath();
+                    ctx.globalAlpha = 0.4;
+                    // Vertical
+                    ctx.moveTo(cw/3, 0); ctx.lineTo(cw/3, ch);
+                    ctx.moveTo(2*cw/3, 0); ctx.lineTo(2*cw/3, ch);
+                    // Horizontal
+                    ctx.moveTo(0, ch/3); ctx.lineTo(cw, ch/3);
+                    ctx.moveTo(0, 2*ch/3); ctx.lineTo(cw, 2*ch/3);
+                    ctx.stroke();
+                    
+                    // Text indicator
+                    ctx.fillStyle = 'cyan';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.globalAlpha = 0.9;
+                    ctx.fillText("ZONA SEGURA", margin + 5, margin - 8);
+                    
+                    ctx.restore();
+                }
 
                 // Draw Selection Rect (Crop)
                 if (this.tool === 'crop' && this.selectionRect) {
