@@ -1461,18 +1461,30 @@
                 
                 // Safe Zone (Guides)
                 if (this.showSafeZone) {
-                    const margin = 60;
+                    const margin = 100; // Increased margin for better visibility (was 60)
                     ctx.save();
-                    ctx.strokeStyle = 'cyan';
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([5, 5]);
+                    
+                    // Outer dimmed area (danger zone)
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; // Red tint for danger zone
+                    ctx.beginPath();
+                    ctx.rect(0, 0, cw, ch); // Full canvas
+                    // Cut out safe zone (counter-clockwise)
+                    ctx.rect(cw - margin, margin, -(cw - margin*2), ch - margin*2); 
+                    ctx.fill('evenodd');
+
+                    // Guide Lines
+                    ctx.strokeStyle = '#ff0000'; // Bright Red
+                    ctx.lineWidth = 2; // Thicker lines
+                    ctx.setLineDash([8, 8]); // Bigger dashes
                     
                     // Safe Margin Box
                     ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
                     
                     // Rule of Thirds
                     ctx.beginPath();
-                    ctx.globalAlpha = 0.4;
+                    ctx.strokeStyle = '#ff00ff'; // Magenta for thirds to differentiate
+                    ctx.lineWidth = 1;
+                    ctx.globalAlpha = 0.6;
                     // Vertical
                     ctx.moveTo(cw/3, 0); ctx.lineTo(cw/3, ch);
                     ctx.moveTo(2*cw/3, 0); ctx.lineTo(2*cw/3, ch);
@@ -1482,10 +1494,10 @@
                     ctx.stroke();
                     
                     // Text indicator
-                    ctx.fillStyle = 'cyan';
-                    ctx.font = 'bold 12px sans-serif';
-                    ctx.globalAlpha = 0.9;
-                    ctx.fillText("ZONA SEGURA", margin + 5, margin - 8);
+                    ctx.fillStyle = '#ff0000';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.globalAlpha = 1.0;
+                    ctx.fillText("ZONA SEGURA (SAFE ZONE)", margin + 10, margin - 10);
                     
                     ctx.restore();
                 }
