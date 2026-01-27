@@ -19,8 +19,8 @@
             --border: #333;
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
             --ruler-bg: #2a2a2a;
-            --ruler-tick: #666;
-            --guide-color: #ff00ff; /* Magenta para guías */
+            --ruler-tick: #888;
+            --guide-color: #ff00ff;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -113,7 +113,7 @@
             justify-content: center;
             align-items: center;
             position: relative;
-            overflow: hidden; /* Scroll handled by container logic if needed, but here we use zoom */
+            overflow: hidden;
             user-select: none;
             touch-action: none;
         }
@@ -130,13 +130,15 @@
             position: absolute; top: 0; left: 30px; right: 0; height: 30px;
             background: var(--ruler-bg); border-bottom: 1px solid var(--border);
             display: flex; overflow: hidden;
-            font-size: 9px; color: #aaa;
+            font-size: 10px; color: #fff; /* Texto más visible */
+            font-weight: bold;
         }
         .ruler-v {
             position: absolute; top: 30px; left: 0; bottom: 0; width: 30px;
             background: var(--ruler-bg); border-right: 1px solid var(--border);
             display: flex; flex-direction: column; overflow: hidden;
-            font-size: 9px; color: #aaa;
+            font-size: 10px; color: #fff; /* Texto más visible */
+            font-weight: bold;
         }
         .ruler-corner {
             position: absolute; top: 0; left: 0; width: 30px; height: 30px;
@@ -144,13 +146,13 @@
             z-index: 10;
         }
         .tick { position: absolute; background: var(--ruler-tick); }
-        .tick-label { position: absolute; font-size: 8px; color: #888; }
-        /* Horizontal Ticks */
-        .tick-h-major { height: 100%; width: 1px; top: 0; }
+        .tick-label { position: absolute; font-size: 9px; color: #ddd; pointer-events: none; }
+        
+        .tick-h-major { height: 100%; width: 1px; top: 0; background: #666; }
         .tick-h-minor { height: 30%; width: 1px; bottom: 0; }
         .label-h { top: 2px; transform: translateX(4px); }
-        /* Vertical Ticks */
-        .tick-v-major { width: 100%; height: 1px; left: 0; }
+        
+        .tick-v-major { width: 100%; height: 1px; left: 0; background: #666; }
         .tick-v-minor { width: 30%; height: 1px; right: 0; }
         .label-v { left: 2px; transform: translateY(4px) rotate(-90deg); transform-origin: left top; }
 
@@ -187,11 +189,10 @@
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); z-index: 100; display: none;
-            /* Allow scrolling for the modal itself */
             overflow-y: auto;
             justify-content: center; 
             padding: 40px 20px;
-            align-items: flex-start; /* Important for scrolling */
+            align-items: flex-start;
         }
         .modal-overlay.open { display: flex; }
         
@@ -202,7 +203,7 @@
             padding: 20px;
             border-radius: 12px;
             border: 1px solid #333;
-            margin: auto; /* Center in scroll view */
+            margin: auto;
             position: relative;
         }
 
@@ -257,7 +258,7 @@
         <div class="logo">
             <i data-lucide="layout-grid"></i>
             Ecopiensa<span>Editor</span>
-            <div class="canvas-info">1080x1080 px</div>
+            <div class="canvas-info" id="canvas-dims">1080x1080 px</div>
         </div>
         <div class="header-controls">
             <!-- Undo Button -->
@@ -355,7 +356,7 @@
                 <div id="text-controls" style="display:none;">
                     <div class="control-group">
                         <label class="control-label">Contenido</label>
-                        <input type="text" id="prop-text-content">
+                        <input type="text" id="prop-text-content" placeholder="Escribe aquí...">
                     </div>
                     <div class="control-group">
                         <label class="control-label">Fuente</label>
@@ -510,8 +511,12 @@
                 const localX = dx * cos - dy * sin;
                 const localY = dx * sin + dy * cos;
                 
-                return Math.abs(localX) < (this.width * this.scale) / 2 && 
-                       Math.abs(localY) < (this.height * this.scale) / 2;
+                // Allow selecting text even if small width
+                const hitW = Math.max(20, this.width * this.scale);
+                const hitH = Math.max(20, this.height * this.scale);
+
+                return Math.abs(localX) < hitW / 2 && 
+                       Math.abs(localY) < hitH / 2;
             }
 
             // Clone data for History
@@ -544,13 +549,17 @@
                 
                 if (existingCanvas) {
                     this.ctx.drawImage(existingCanvas, 0, 0);
-                } else {
+                } else if(img) {
                     this.ctx.drawImage(img, 0, 0);
                 }
             }
 
             serialize() {
                 const base = super.serialize();
+                // Store minimal data. Storing full ImageData repeatedly crashes memory.
+                // We rely on the internal canvas state. 
+                // For a robust undo with pixel manipulation (erase/fill), we DO need ImageData.
+                // Optimizing: only store imageData if modified? For now, we keep it but be careful.
                 return {
                     ...base,
                     originalImage: this.originalImage,
@@ -560,13 +569,9 @@
             
             replaceImage(newImg) {
                 this.originalImage = newImg;
-                
                 const oldWidth = this.width;
-                const oldHeight = this.height;
-                
                 this.width = newImg.width;
                 this.height = newImg.height;
-                
                 this.canvas.width = this.width;
                 this.canvas.height = this.height;
                 this.ctx.drawImage(newImg, 0, 0);
@@ -606,7 +611,6 @@
                 const imageData = this.ctx.getImageData(0, 0, this.width, this.height);
                 const data = imageData.data;
                 
-                // 1. Erase outside (existing logic)
                 for(let ly = 0; ly < this.height; ly++) {
                     for(let lx = 0; lx < this.width; lx++) {
                         const cx = lx - this.width/2;
@@ -623,14 +627,12 @@
                         
                         if (gx < rect.x || gx > rect.x + rect.w || gy < rect.y || gy > rect.y + rect.h) {
                             const idx = (ly * this.width + lx) * 4;
-                            data[idx + 3] = 0; // Alpha 0
+                            data[idx + 3] = 0; 
                         }
                     }
                 }
                 
                 this.ctx.putImageData(imageData, 0, 0);
-                
-                // 2. Trim empty space (NEW logic)
                 this.trim();
             }
 
@@ -656,18 +658,12 @@
                     }
                 }
 
-                if (!found) return; // Empty image
+                if (!found) return;
 
-                // Calculate new dimensions
                 const trimW = maxX - minX + 1;
                 const trimH = maxY - minY + 1;
-
-                // Extract trimmed image data
                 const trimmedData = this.ctx.getImageData(minX, minY, trimW, trimH);
 
-                // Calculate Center Offset (Delta from old center to new center)
-                // Old Center (local) = w/2, h/2
-                // New Center (local absolute) = minX + trimW/2, minY + trimH/2
                 const oldCX = w / 2;
                 const oldCY = h / 2;
                 const newCX = minX + trimW / 2;
@@ -675,15 +671,12 @@
 
                 const dx = (newCX - oldCX) * this.scale;
                 const dy = (newCY - oldCY) * this.scale;
-
-                // Rotate this offset to apply to global position
                 const cos = Math.cos(this.rotation);
                 const sin = Math.sin(this.rotation);
 
                 this.x += dx * cos - dy * sin;
                 this.y += dx * sin + dy * cos;
 
-                // Update canvas and dimensions
                 this.canvas.width = trimW;
                 this.canvas.height = trimH;
                 this.width = trimW;
@@ -733,12 +726,10 @@
                     if(seen[cy * w + cx]) continue;
                     
                     const cr = data[idx], cg = data[idx+1], cb = data[idx+2], ca = data[idx+3];
-                    
                     const diff = Math.abs(cr - tr) + Math.abs(cg - tg) + Math.abs(cb - tb) + Math.abs(ca - ta);
                     
                     if (diff <= tolerance * 4) {
                         seen[cy * w + cx] = 1;
-
                         if(mode === 'erase') {
                             data[idx+3] = 0;
                         } else if (mode === 'fill') {
@@ -747,14 +738,12 @@
                             data[idx+2] = fillColor.b;
                             data[idx+3] = 255;
                         }
-
                         if(cx > 0) stack.push([cx-1, cy]);
                         if(cx < w-1) stack.push([cx+1, cy]);
                         if(cy > 0) stack.push([cx, cy-1]);
                         if(cy < h-1) stack.push([cx, cy+1]);
                     }
                 }
-
                 this.ctx.putImageData(imageData, 0, 0);
             }
         }
@@ -762,11 +751,11 @@
         class TextLayer extends Layer {
             constructor(text, id) {
                 super('text', id);
-                this.text = text;
+                this.text = text || "Texto";
                 this.fontFamily = 'Arial';
                 this.fontSize = 60;
                 this.color = '#ffffff';
-                this.textTransform = 'none'; // none, uppercase, lowercase
+                this.textTransform = 'none'; 
                 this.measureDimensions();
             }
 
@@ -783,16 +772,17 @@
             }
 
             getRenderText() {
-                if (this.textTransform === 'uppercase') return this.text.toUpperCase();
-                if (this.textTransform === 'lowercase') return this.text.toLowerCase();
-                return this.text;
+                let t = this.text || " "; // Ensure at least a space for rendering
+                if (this.textTransform === 'uppercase') return t.toUpperCase();
+                if (this.textTransform === 'lowercase') return t.toLowerCase();
+                return t;
             }
 
             measureDimensions() {
                 const ctx = document.createElement('canvas').getContext('2d');
                 ctx.font = `${this.fontSize}px ${this.fontFamily}`;
                 const metrics = ctx.measureText(this.getRenderText());
-                this.width = metrics.width;
+                this.width = Math.max(metrics.width, 20); // Minimum width to be selectable
                 this.height = this.fontSize; 
             }
 
@@ -807,6 +797,14 @@
                 ctx.textBaseline = 'middle';
                 ctx.textAlign = 'center';
                 ctx.fillText(this.getRenderText(), 0, 0);
+                
+                // Draw a faint border if empty but selected (helper)
+                if(this.selected && (!this.text || this.text.trim() === '')) {
+                    ctx.strokeStyle = '#555';
+                    ctx.setLineDash([2,2]);
+                    ctx.strokeRect(-20, -this.fontSize/2, 40, this.fontSize);
+                }
+                
                 ctx.restore();
             }
         }
@@ -819,7 +817,7 @@
                 this.ctx = this.canvas.getContext('2d');
                 this.layers = [];
                 this.history = [];
-                this.historyMax = 20;
+                this.historyMax = 15; // Limit to save memory
                 this.activeLayer = null;
                 this.tool = 'move'; 
                 this.zoom = 1;
@@ -827,10 +825,9 @@
                 this.isRotating = false;
                 this.isResizing = false;
                 
-                // Selection / Crop State
                 this.isSelecting = false;
                 this.selectionStart = {x:0, y:0};
-                this.selectionRect = null; // {x, y, w, h}
+                this.selectionRect = null; 
 
                 this.lastMouse = { x: 0, y: 0 };
                 this.bgColor = '#1a1a1a';
@@ -842,10 +839,14 @@
                 this.saveState();
             }
 
-            // --- History System (Undo) ---
             saveState() {
+                // If the last state is identical (simple check), don't push? 
+                // Deep equality is expensive. We just rely on user action triggers.
+                
                 const state = {
                     bgColor: this.bgColor,
+                    width: this.canvas.width,
+                    height: this.canvas.height,
                     layers: this.layers.map(l => l.serialize())
                 };
 
@@ -860,7 +861,7 @@
 
             undo() {
                 if (this.history.length <= 1) return;
-                this.history.pop();
+                this.history.pop(); // Remove current state
                 const prevState = this.history[this.history.length - 1];
                 this.restoreState(prevState);
                 this.updateUndoButton();
@@ -869,12 +870,20 @@
             restoreState(state) {
                 this.bgColor = state.bgColor;
                 document.getElementById('bg-color').value = this.bgColor;
+                
+                // Restore Canvas Size
+                if(state.width) {
+                    this.canvas.width = state.width;
+                    this.canvas.height = state.height;
+                    this.initRulers(); // Redraw rulers for new size
+                    document.getElementById('canvas-dims').innerText = `${state.width}x${state.height} px`;
+                }
 
                 this.layers = state.layers.map(data => {
                     let layer;
                     if (data.type === 'image') {
                         layer = new ImageLayer(data.originalImage, data.id);
-                        layer.ctx.putImageData(data.imageData, 0, 0);
+                        if(data.imageData) layer.ctx.putImageData(data.imageData, 0, 0);
                     } else {
                         layer = new TextLayer(data.text, data.id);
                         layer.fontFamily = data.fontFamily;
@@ -899,8 +908,6 @@
                 const btn = document.getElementById('undo-btn');
                 btn.disabled = this.history.length <= 1;
             }
-
-            // --- Events & Logic ---
 
             initEvents() {
                 const workspace = document.getElementById('workspace');
@@ -963,15 +970,12 @@
             }
 
             initRulers() {
-                // Initial draw
-                this.drawRulers();
-            }
-
-            drawRulers() {
-                // Assumed standard: 96 DPI. 1080px / 96 * 2.54 = ~28.575 cm
-                // We will map 1 cm = 37.8 pixels
+                // Rulers based on current canvas size
+                const w = this.canvas.width;
+                const h = this.canvas.height;
                 const pxPerCm = 37.8;
-                const totalCm = 1080 / pxPerCm;
+                const totalCmW = w / pxPerCm;
+                const totalCmH = h / pxPerCm;
                 
                 const hRuler = document.getElementById('ruler-h');
                 const vRuler = document.getElementById('ruler-v');
@@ -980,9 +984,10 @@
                 vRuler.innerHTML = '';
 
                 // Horizontal
-                for(let i = 0; i <= Math.ceil(totalCm); i++) {
+                for(let i = 0; i <= Math.ceil(totalCmW); i++) {
                     const left = i * pxPerCm;
-                    
+                    if(left > w + 50) break;
+
                     const tickMaj = document.createElement('div');
                     tickMaj.className = 'tick tick-h-major';
                     tickMaj.style.left = left + 'px';
@@ -994,7 +999,6 @@
                     label.style.left = left + 'px';
                     hRuler.appendChild(label);
                     
-                    // Minors (mm)
                     for(let j=1; j<10; j++) {
                         const tickMin = document.createElement('div');
                         tickMin.className = 'tick tick-h-minor';
@@ -1004,9 +1008,10 @@
                 }
                 
                 // Vertical
-                for(let i = 0; i <= Math.ceil(totalCm); i++) {
+                for(let i = 0; i <= Math.ceil(totalCmH); i++) {
                     const top = i * pxPerCm;
-                    
+                    if(top > h + 50) break;
+
                     const tickMaj = document.createElement('div');
                     tickMaj.className = 'tick tick-v-major';
                     tickMaj.style.top = top + 'px';
@@ -1033,7 +1038,8 @@
                 
                 if(target.id === 'prop-opacity') this.activeLayer.opacity = target.value;
                 if(target.id === 'prop-text-content' && this.activeLayer.type === 'text') {
-                    this.activeLayer.text = target.value;
+                    // Update text, if empty keep layer alive
+                    this.activeLayer.text = target.value; 
                     this.activeLayer.measureDimensions();
                 }
                 if(target.id === 'prop-font' && this.activeLayer.type === 'text') {
@@ -1053,14 +1059,19 @@
                     const img = new Image();
                     img.onload = () => {
                         let w = img.width, h = img.height;
-                        if(w > 1500 || h > 1500) {
-                            const ratio = Math.min(1500/w, 1500/h);
+                        const maxD = Math.max(this.canvas.width, this.canvas.height) * 1.5;
+                        if(w > maxD || h > maxD) {
+                            const ratio = Math.min(maxD/w, maxD/h);
                             w *= ratio; h *= ratio;
                         }
                         const layer = new ImageLayer(img, Date.now());
-                        if(layer.width > 1080) {
-                            layer.scale = 1080 / layer.width * 0.8;
+                        // Fit to canvas
+                        if(layer.width > this.canvas.width) {
+                            layer.scale = this.canvas.width / layer.width * 0.8;
                         }
+                        layer.x = this.canvas.width / 2;
+                        layer.y = this.canvas.height / 2;
+                        
                         this.addLayer(layer);
                     };
                     img.src = e.target.result;
@@ -1074,9 +1085,8 @@
                     reader.onload = (e) => {
                         const img = new Image();
                         img.onload = () => {
-                            this.saveState(); // Save before replace
+                            this.saveState();
                             this.activeLayer.replaceImage(img);
-                            // Clear inputs
                             input.value = '';
                         };
                         img.src = e.target.result;
@@ -1088,6 +1098,8 @@
             addTextLayer() {
                 this.saveState();
                 const layer = new TextLayer('Nuevo Texto', Date.now());
+                layer.x = this.canvas.width / 2;
+                layer.y = this.canvas.height / 2;
                 this.addLayer(layer);
                 this.setTool('move');
             }
@@ -1120,8 +1132,8 @@
             centerLayer() {
                 if(this.activeLayer) {
                     this.saveState();
-                    this.activeLayer.x = 1080/2;
-                    this.activeLayer.y = 1080/2;
+                    this.activeLayer.x = this.canvas.width / 2;
+                    this.activeLayer.y = this.canvas.height / 2;
                     this.saveState();
                 }
             }
@@ -1135,12 +1147,11 @@
 
             setTool(name) {
                 this.tool = name;
-                this.selectionRect = null; // Reset selection
+                this.selectionRect = null; 
                 document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
                 const btn = document.getElementById(`tool-${name}`);
                 if(btn) btn.classList.add('active');
                 
-                // Toggle settings visibility
                 const toolSettings = document.getElementById('tool-settings');
                 const eraserSet = document.getElementById('eraser-settings');
                 const wandSet = document.getElementById('wand-settings');
@@ -1158,8 +1169,6 @@
             setZoom(val) {
                 this.zoom = parseFloat(val);
                 const container = document.getElementById('canvas-wrapper');
-                // The canvas wrapper contains rulers and canvas. Scale that.
-                // Wait, scaling wrapper scales rulers too which is what we want (visual zoom).
                 container.style.transform = `scale(${this.zoom})`;
                 document.getElementById('zoom-level').innerText = Math.round(this.zoom * 100) + '%';
             }
@@ -1184,7 +1193,7 @@
                 if(this.activeLayer.type === 'text') {
                     textControls.style.display = 'block';
                     imgControls.style.display = 'none';
-                    document.getElementById('prop-text-content').value = this.activeLayer.text;
+                    document.getElementById('prop-text-content').value = this.activeLayer.text || "";
                     let val = this.activeLayer.fontFamily;
                     if (this.activeLayer.textTransform && this.activeLayer.textTransform !== 'none') {
                         val += '|' + this.activeLayer.textTransform;
@@ -1269,12 +1278,18 @@
                 const pos = this.getMousePos(e);
 
                 if (this.tool === 'move') {
+                    const cx = this.canvas.width / 2;
+                    const cy = this.canvas.height / 2;
+
                     if (this.isDragging && this.activeLayer) {
                         this.hasUnsavedChanges = true;
                         let nx = this.activeLayer.x + (pos.x - this.lastMouse.x);
                         let ny = this.activeLayer.y + (pos.y - this.lastMouse.y);
-                        if (Math.abs(nx - 1080/2) < 10) nx = 1080/2;
-                        if (Math.abs(ny - 1080/2) < 10) ny = 1080/2;
+                        
+                        // Snap to center
+                        if (Math.abs(nx - cx) < 10) nx = cx;
+                        if (Math.abs(ny - cy) < 10) ny = cy;
+
                         this.activeLayer.x = nx;
                         this.activeLayer.y = ny;
                     } else if (this.isRotating && this.activeLayer) {
@@ -1314,15 +1329,13 @@
                 
                 if (this.tool === 'crop' && this.isSelecting) {
                     this.isSelecting = false;
-                    // Trigger simple confirmation or action
-                    if(this.selectionRect && this.selectionRect.w > 10 && this.selectionRect.h > 10 && this.activeLayer && this.activeLayer.type === 'image') {
-                        // Perform crop (inverse erase)
+                    if(this.selectionRect && this.selectionRect.w > 10 && this.selectionRect.h > 10) {
                         this.saveState();
-                        this.activeLayer.cropOutside(this.selectionRect);
+                        // Crop Canvas
+                        this.cropCanvas(this.selectionRect);
                         this.saveState();
-                        // Reset tool to move? Optional. Keep crop to allow refining?
-                        // Reset rect for UI cleanup
                         this.selectionRect = null;
+                        this.setTool('move');
                     }
                 }
 
@@ -1330,6 +1343,32 @@
                     this.saveState();
                     this.hasUnsavedChanges = false;
                 }
+            }
+            
+            cropCanvas(rect) {
+                // rect is in current canvas coords
+                // Create temp canvas with crop dims
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = rect.w;
+                tempCanvas.height = rect.h;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // We need to shift all layers so that rect.x, rect.y becomes 0,0
+                // And we update canvas size
+                
+                // 1. Update layers pos
+                this.layers.forEach(l => {
+                    l.x -= rect.x;
+                    l.y -= rect.y;
+                });
+                
+                // 2. Update Canvas Size
+                this.canvas.width = rect.w;
+                this.canvas.height = rect.h;
+                document.getElementById('canvas-dims').innerText = `${Math.round(rect.w)}x${Math.round(rect.h)} px`;
+                
+                // 3. Redraw rulers
+                this.initRulers();
             }
 
             checkRotationHandle(pos) {
@@ -1351,6 +1390,9 @@
             }
 
             drawUI(ctx) {
+                const cw = this.canvas.width;
+                const ch = this.canvas.height;
+
                 // Draw Selection Rect (Crop)
                 if (this.tool === 'crop' && this.selectionRect) {
                     ctx.save();
@@ -1359,12 +1401,9 @@
                     ctx.setLineDash([5, 5]);
                     ctx.strokeRect(this.selectionRect.x, this.selectionRect.y, this.selectionRect.w, this.selectionRect.h);
                     
-                    // Darken outside
                     ctx.fillStyle = 'rgba(0,0,0,0.5)';
                     ctx.beginPath();
-                    // Outer rect (canvas) clockwise
-                    ctx.rect(0, 0, 1080, 1080);
-                    // Inner rect (hole) counter-clockwise
+                    ctx.rect(0, 0, cw, ch);
                     ctx.rect(this.selectionRect.x + this.selectionRect.w, this.selectionRect.y, -this.selectionRect.w, this.selectionRect.h);
                     ctx.fill('evenodd');
                     ctx.restore();
@@ -1374,7 +1413,6 @@
                 
                 const l = this.activeLayer;
 
-                // --- SMART GUIDES (Alignment) ---
                 if (this.isDragging && this.tool === 'move') {
                     this.drawSmartGuides(ctx, l);
                 }
@@ -1424,50 +1462,47 @@
                 const centerSnap = 10;
                 
                 ctx.save();
-                ctx.strokeStyle = '#ff00ff'; // Magenta
+                ctx.strokeStyle = '#ff00ff';
                 ctx.lineWidth = 1;
                 ctx.setLineDash([4, 4]);
-                ctx.font = '12px sans-serif';
+                ctx.font = '10px sans-serif';
                 ctx.fillStyle = '#ff00ff';
-
-                // Center X
-                if (Math.abs(cx - 540) < centerSnap) {
-                    // Snap visually (optional, user asked for visual guide mostly)
-                    ctx.beginPath();
-                    ctx.moveTo(540, 0);
-                    ctx.lineTo(540, 1080);
-                    ctx.stroke();
-                }
                 
-                // Center Y
-                if (Math.abs(cy - 540) < centerSnap) {
-                    ctx.beginPath();
-                    ctx.moveTo(0, 540);
-                    ctx.lineTo(1080, 540);
-                    ctx.stroke();
+                const canvasCX = this.canvas.width / 2;
+                const canvasCY = this.canvas.height / 2;
+
+                // 1. Center of Canvas Guides
+                if (Math.abs(cx - canvasCX) < centerSnap) {
+                    ctx.beginPath(); ctx.moveTo(canvasCX, 0); ctx.lineTo(canvasCX, this.canvas.height); ctx.stroke();
+                }
+                if (Math.abs(cy - canvasCY) < centerSnap) {
+                    ctx.beginPath(); ctx.moveTo(0, canvasCY); ctx.lineTo(this.canvas.width, canvasCY); ctx.stroke();
                 }
 
-                // Distance Lines to Edges
-                // To Left
-                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cx, cy); ctx.stroke();
-                ctx.fillText(Math.round(cx), cx/2, cy - 5);
-                
-                // To Top
-                ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cy); ctx.stroke();
-                ctx.fillText(Math.round(cy), cx + 5, cy/2);
+                // 2. Alignment with OTHER layers
+                this.layers.forEach(other => {
+                    if (other === layer) return;
+                    
+                    // Snap to other Center X
+                    if (Math.abs(cx - other.x) < centerSnap) {
+                        ctx.beginPath(); ctx.moveTo(other.x, Math.min(cy, other.y)); ctx.lineTo(other.x, Math.max(cy, other.y)); ctx.stroke();
+                    }
+                    // Snap to other Center Y
+                    if (Math.abs(cy - other.y) < centerSnap) {
+                        ctx.beginPath(); ctx.moveTo(Math.min(cx, other.x), other.y); ctx.lineTo(Math.max(cx, other.x), other.y); ctx.stroke();
+                    }
+                });
 
-                // Right/Bottom optional to avoid clutter, but let's add them
-                // To Right
-                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(1080, cy); ctx.stroke();
-                // To Bottom
-                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, 1080); ctx.stroke();
+                // Distance Labels
+                ctx.fillText(`x: ${Math.round(cx)}`, cx + 10, cy - 10);
+                ctx.fillText(`y: ${Math.round(cy)}`, cx + 10, cy + 10);
 
                 ctx.restore();
             }
 
             loop() {
                 this.ctx.fillStyle = this.bgColor;
-                this.ctx.fillRect(0, 0, 1080, 1080);
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 this.layers.forEach(layer => layer.draw(this.ctx));
                 this.drawUI(this.ctx);
                 requestAnimationFrame(this.loop.bind(this));
@@ -1482,13 +1517,13 @@
 
             exportImage() {
                 const prevSelection = this.activeLayer;
-                // Temporarily disable selection rect drawing
                 const wasSelecting = this.tool === 'crop' && this.selectionRect;
                 if(wasSelecting) this.selectionRect = null;
 
                 this.setActiveLayer(null);
                 this.ctx.fillStyle = this.bgColor;
-                this.ctx.fillRect(0, 0, 1080, 1080);
+                // Draw Full Canvas
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 this.layers.forEach(layer => layer.draw(this.ctx));
                 
                 const format = document.getElementById('export-format').value;
@@ -1500,8 +1535,6 @@
                 this.setActiveLayer(prevSelection);
             }
 
-            // --- Profile & Preview Logic ---
-
             toggleGridPreview() {
                 const modal = document.getElementById('preview-modal');
                 const isOpen = modal.classList.contains('open');
@@ -1510,7 +1543,7 @@
                     const prevSelection = this.activeLayer;
                     this.setActiveLayer(null);
                     this.ctx.fillStyle = this.bgColor;
-                    this.ctx.fillRect(0, 0, 1080, 1080);
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                     this.layers.forEach(layer => layer.draw(this.ctx));
                     
                     document.getElementById('preview-img').src = this.canvas.toDataURL();
