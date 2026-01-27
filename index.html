@@ -55,7 +55,7 @@
         .zoom-controls { display: flex; align-items: center; gap: 8px; background: var(--bg-dark); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); }
         .zoom-slider { width: 100px; accent-color: var(--accent); cursor: pointer; }
 
-        button {
+        button, select.header-select {
             background: var(--bg-hover);
             border: 1px solid var(--border);
             color: var(--text-main);
@@ -263,6 +263,12 @@
             <div class="canvas-info" id="canvas-dims">1080x1080 px</div>
         </div>
         <div class="header-controls">
+            <!-- Format Selector -->
+            <select class="header-select" id="canvas-format" onchange="app.changeFormat(this.value)" title="Formato de Publicación">
+                <option value="square">Cuadrado (1:1)</option>
+                <option value="portrait">Vertical (4:5)</option>
+            </select>
+
             <!-- Undo Button -->
             <button onclick="app.undo()" id="undo-btn" title="Deshacer (Ctrl+Z)" disabled>
                 <i data-lucide="undo-2"></i> <span>Deshacer</span>
@@ -279,7 +285,7 @@
 
             <button id="safe-zone-btn" onclick="app.toggleSafeZone()" title="Mostrar/Ocultar Zona Segura"><i data-lucide="grid-3x3"></i> <span>Guías</span></button>
             <button onclick="app.toggleGridPreview()"><i data-lucide="smartphone"></i> <span>Vista Previa</span></button>
-            <select id="export-format" style="width: auto;">
+            <select id="export-format" class="header-select" style="width: auto;">
                 <option value="image/png">PNG</option>
                 <option value="image/jpeg">JPG</option>
                 <option value="image/webp">WebP</option>
@@ -347,7 +353,7 @@
                     <button onclick="app.clearBackground()" style="width:40px; justify-content:center;" title="Quitar Fondo"><i data-lucide="trash-2"></i></button>
                 </div>
                 <div style="font-size: 0.75rem; color: #777; margin-top: 5px;">
-                    Se ajusta automáticamente a 1080x1080
+                    Se ajusta automáticamente al formato.
                 </div>
             </div>
         </div>
@@ -889,6 +895,7 @@
                 this.selectionRect = null; 
                 
                 this.showSafeZone = false; // State for Safe Zone Guide
+                this.format = 'square'; // 'square' (1:1) or 'portrait' (4:5)
 
                 this.lastMouse = { x: 0, y: 0 };
                 this.bgColor = '#1a1a1a';
@@ -903,6 +910,9 @@
             saveState() {
                 const state = {
                     bgColor: this.bgColor,
+                    format: this.format,
+                    width: this.canvas.width,
+                    height: this.canvas.height,
                     bgImage: this.backgroundImage, // Store reference to current bg image object
                     layers: this.layers.map(l => l.serialize())
                 };
@@ -928,6 +938,17 @@
                 this.bgColor = state.bgColor;
                 this.backgroundImage = state.bgImage; // Restore bg
                 document.getElementById('bg-color').value = this.bgColor;
+                
+                // Restore format
+                this.format = state.format || 'square';
+                document.getElementById('canvas-format').value = this.format;
+                
+                if(state.width) {
+                    this.canvas.width = state.width;
+                    this.canvas.height = state.height;
+                    this.initRulers();
+                    document.getElementById('canvas-dims').innerText = `${state.width}x${state.height} px`;
+                }
                 
                 this.layers = state.layers.map(data => {
                     let layer;
@@ -1022,11 +1043,29 @@
                     if (e.key === 'c') this.setTool('crop');
                 });
             }
+            
+            changeFormat(newFormat) {
+                this.saveState();
+                this.format = newFormat;
+                
+                if (this.format === 'square') {
+                    this.canvas.width = 1080;
+                    this.canvas.height = 1080;
+                } else if (this.format === 'portrait') {
+                    this.canvas.width = 1080;
+                    this.canvas.height = 1350;
+                }
+                
+                document.getElementById('canvas-dims').innerText = `${this.canvas.width}x${this.canvas.height} px`;
+                this.initRulers();
+                
+                // Adjust layers to center if needed? Or just leave them.
+                // Keeping them is better usually.
+            }
 
             initRulers() {
-                // Fixed 1080x1080
-                const w = 1080;
-                const h = 1080;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
                 const pxPerCm = 37.8;
                 const totalCmW = w / pxPerCm;
                 const totalCmH = h / pxPerCm;
@@ -1461,43 +1500,47 @@
                 
                 // Safe Zone (Guides)
                 if (this.showSafeZone) {
-                    const margin = 100; // Increased margin for better visibility (was 60)
                     ctx.save();
                     
-                    // Outer dimmed area (danger zone)
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; // Red tint for danger zone
-                    ctx.beginPath();
-                    ctx.rect(0, 0, cw, ch); // Full canvas
-                    // Cut out safe zone (counter-clockwise)
-                    ctx.rect(cw - margin, margin, -(cw - margin*2), ch - margin*2); 
-                    ctx.fill('evenodd');
+                    if (this.format === 'square') {
+                        // Square Mode: Inner Margin
+                        const margin = 60;
+                        ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
+                        ctx.beginPath();
+                        ctx.rect(0, 0, cw, ch);
+                        ctx.rect(cw - margin, margin, -(cw - margin*2), ch - margin*2); 
+                        ctx.fill('evenodd');
 
-                    // Guide Lines
-                    ctx.strokeStyle = '#ff0000'; // Bright Red
-                    ctx.lineWidth = 2; // Thicker lines
-                    ctx.setLineDash([8, 8]); // Bigger dashes
-                    
-                    // Safe Margin Box
-                    ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
-                    
-                    // Rule of Thirds
-                    ctx.beginPath();
-                    ctx.strokeStyle = '#ff00ff'; // Magenta for thirds to differentiate
-                    ctx.lineWidth = 1;
-                    ctx.globalAlpha = 0.6;
-                    // Vertical
-                    ctx.moveTo(cw/3, 0); ctx.lineTo(cw/3, ch);
-                    ctx.moveTo(2*cw/3, 0); ctx.lineTo(2*cw/3, ch);
-                    // Horizontal
-                    ctx.moveTo(0, ch/3); ctx.lineTo(cw, ch/3);
-                    ctx.moveTo(0, 2*ch/3); ctx.lineTo(cw, 2*ch/3);
-                    ctx.stroke();
-                    
-                    // Text indicator
-                    ctx.fillStyle = '#ff0000';
-                    ctx.font = 'bold 14px sans-serif';
-                    ctx.globalAlpha = 1.0;
-                    ctx.fillText("ZONA SEGURA (SAFE ZONE)", margin + 10, margin - 10);
+                        ctx.strokeStyle = '#ff0000'; // Bright Red
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([8, 8]);
+                        ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
+                        
+                        ctx.fillStyle = '#ff0000';
+                        ctx.font = 'bold 14px sans-serif';
+                        ctx.fillText("ZONA SEGURA (MÁRGENES)", margin + 10, margin - 10);
+                        
+                    } else if (this.format === 'portrait') {
+                        // Portrait Mode: Top/Bottom Crops
+                        const cropH = 135; // 135px top and bottom
+                        
+                        // Darken Top and Bottom
+                        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+                        ctx.fillRect(0, 0, cw, cropH); // Top danger zone
+                        ctx.fillRect(0, ch - cropH, cw, cropH); // Bottom danger zone
+                        
+                        // Outline Safe Zone (Center Square)
+                        ctx.strokeStyle = '#ff0000';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([8, 8]);
+                        ctx.strokeRect(0, cropH, cw, ch - cropH*2);
+                        
+                        // Text indicators
+                        ctx.fillStyle = '#ff0000';
+                        ctx.font = 'bold 14px sans-serif';
+                        ctx.fillText("SE RECORTA EN PERFIL", 10, 30);
+                        ctx.fillText("ZONA VISIBLE EN PERFIL (1:1)", 10, cropH + 20);
+                    }
                     
                     ctx.restore();
                 }
