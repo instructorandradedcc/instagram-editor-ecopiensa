@@ -172,11 +172,11 @@
         .control-group { margin-bottom: 15px; }
         .control-label { display: block; font-size: 0.9rem; margin-bottom: 5px; }
         
-        input[type="text"], input[type="number"], select {
+        input[type="text"], input[type="number"], select, textarea {
             width: 100%; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text-main);
             padding: 8px; border-radius: 4px; outline: none;
         }
-        input:focus { border-color: var(--accent); }
+        input:focus, textarea:focus { border-color: var(--accent); }
 
         input[type="range"] { width: 100%; accent-color: var(--accent); }
         
@@ -367,7 +367,12 @@
                 <div id="text-controls" style="display:none;">
                     <div class="control-group">
                         <label class="control-label">Contenido</label>
-                        <input type="text" id="prop-text-content" placeholder="Escribe aquí...">
+                        <!-- Changed to Textarea for better writing experience -->
+                        <textarea id="prop-text-content" rows="3" placeholder="Escribe aquí..."></textarea>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Ancho de Caja (Wrap)</label>
+                        <input type="range" id="prop-text-width" min="100" max="1000" value="500">
                     </div>
                     <div class="control-group">
                         <label class="control-label">Fuente</label>
@@ -767,6 +772,7 @@
                 this.fontSize = 60;
                 this.color = '#ffffff';
                 this.textTransform = 'none'; 
+                this.boxWidth = 500; // Ancho por defecto para el wrapping
                 this.measureDimensions();
             }
 
@@ -778,23 +784,52 @@
                     fontFamily: this.fontFamily,
                     fontSize: this.fontSize,
                     color: this.color,
-                    textTransform: this.textTransform
+                    textTransform: this.textTransform,
+                    boxWidth: this.boxWidth
                 };
             }
 
             getRenderText() {
-                let t = this.text || " "; // Ensure at least a space for rendering
+                let t = this.text || " "; 
                 if (this.textTransform === 'uppercase') return t.toUpperCase();
                 if (this.textTransform === 'lowercase') return t.toLowerCase();
                 return t;
             }
 
+            getWrappedLines(ctx) {
+                const text = this.getRenderText();
+                const words = text.split(' ');
+                let lines = [];
+                let currentLine = words[0];
+
+                for (let i = 1; i < words.length; i++) {
+                    const word = words[i];
+                    const width = ctx.measureText(currentLine + " " + word).width;
+                    if (width < this.boxWidth) {
+                        currentLine += " " + word;
+                    } else {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    }
+                }
+                lines.push(currentLine);
+                return lines;
+            }
+
             measureDimensions() {
                 const ctx = document.createElement('canvas').getContext('2d');
                 ctx.font = `${this.fontSize}px ${this.fontFamily}`;
-                const metrics = ctx.measureText(this.getRenderText());
-                this.width = Math.max(metrics.width, 20); // Minimum width to be selectable
-                this.height = this.fontSize; 
+                
+                // Si el texto es vacio, dar dimensiones minimas
+                if (!this.text || this.text.trim() === '') {
+                    this.width = this.boxWidth;
+                    this.height = this.fontSize;
+                    return;
+                }
+
+                const lines = this.getWrappedLines(ctx);
+                this.width = this.boxWidth;
+                this.height = lines.length * this.fontSize * 1.2; // 1.2 es el line-height aproximado
             }
 
             draw(ctx) {
@@ -807,13 +842,22 @@
                 ctx.fillStyle = this.color;
                 ctx.textBaseline = 'middle';
                 ctx.textAlign = 'center';
-                ctx.fillText(this.getRenderText(), 0, 0);
                 
-                // Draw a faint border if empty but selected (helper)
+                const lines = this.getWrappedLines(ctx);
+                const lineHeight = this.fontSize * 1.2;
+                const totalHeight = lines.length * lineHeight;
+                
+                // Dibujar cada linea centrada
+                lines.forEach((line, i) => {
+                    const yOffset = (i * lineHeight) - (totalHeight / 2) + (lineHeight / 2);
+                    ctx.fillText(line, 0, yOffset);
+                });
+                
+                // Borde de guia si esta seleccionado (y vacio)
                 if(this.selected && (!this.text || this.text.trim() === '')) {
                     ctx.strokeStyle = '#555';
                     ctx.setLineDash([2,2]);
-                    ctx.strokeRect(-20, -this.fontSize/2, 40, this.fontSize);
+                    ctx.strokeRect(-this.boxWidth/2, -this.fontSize/2, this.boxWidth, this.fontSize);
                 }
                 
                 ctx.restore();
@@ -891,6 +935,7 @@
                         layer.fontSize = data.fontSize;
                         layer.color = data.color;
                         layer.textTransform = data.textTransform || 'none';
+                        layer.boxWidth = data.boxWidth || 500;
                     }
                     layer.x = data.x;
                     layer.y = data.y;
@@ -944,7 +989,7 @@
                     this.saveState();
                 });
                 
-                const propInputs = ['prop-opacity', 'prop-text-content', 'prop-font', 'prop-color'];
+                const propInputs = ['prop-opacity', 'prop-text-content', 'prop-font', 'prop-color', 'prop-text-width'];
                 propInputs.forEach(id => {
                     document.getElementById(id).addEventListener('input', (e) => {
                         this.handlePropertyChange(e);
@@ -953,6 +998,9 @@
                 });
                 
                 window.addEventListener('keydown', (e) => {
+                    // Prevenir que se borre la capa si estoy escribiendo en un input
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
                     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
                         e.preventDefault();
                         this.undo();
@@ -1040,6 +1088,10 @@
                 if(target.id === 'prop-opacity') this.activeLayer.opacity = target.value;
                 if(target.id === 'prop-text-content' && this.activeLayer.type === 'text') {
                     this.activeLayer.text = target.value; 
+                    this.activeLayer.measureDimensions();
+                }
+                if(target.id === 'prop-text-width' && this.activeLayer.type === 'text') {
+                    this.activeLayer.boxWidth = parseInt(target.value);
                     this.activeLayer.measureDimensions();
                 }
                 if(target.id === 'prop-font' && this.activeLayer.type === 'text') {
@@ -1215,6 +1267,8 @@
                     textControls.style.display = 'block';
                     imgControls.style.display = 'none';
                     document.getElementById('prop-text-content').value = this.activeLayer.text || "";
+                    document.getElementById('prop-text-width').value = this.activeLayer.boxWidth; // Update width slider
+                    
                     let val = this.activeLayer.fontFamily;
                     if (this.activeLayer.textTransform && this.activeLayer.textTransform !== 'none') {
                         val += '|' + this.activeLayer.textTransform;
