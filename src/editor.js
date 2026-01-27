@@ -8,21 +8,20 @@ export class Editor {
         // State
         this.layers = [];
         this.activeLayer = null;
-        this.history = [];
 
-        // Canvas Config
+        // Canvas Config & Guides
         this.canvas.width = 1080;
         this.canvas.height = 1080;
-        this.backgroundColor = '#1a1a1a'; // Default background
+        this.backgroundColor = '#1a1a1a';
+        this.guides = []; // Stores current safe lines {x, y, vertical: bool}
 
         // Tools
-        this.currentTool = 'move'; // move, wand, eraser, text, bucket
+        this.currentTool = 'move';
         this.isDragging = false;
         this.isResizing = false;
         this.dragOffset = { x: 0, y: 0 };
-        this.resizeHandle = null; // 'br', 'rotate'
+        this.resizeHandle = null;
 
-        // Magic Wand settings
         this.wandTolerance = 30;
 
         this.initEvents();
@@ -30,23 +29,17 @@ export class Editor {
     }
 
     initEvents() {
-        // Mouse
         this.canvas.addEventListener('mousedown', (e) => this.handleDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.handleUp(e));
 
-        // Touch
-        this.canvas.addEventListener('touchstart', (e) => {
-            // e.preventDefault();
-            this.handleDown(e.touches[0]);
-        });
+        this.canvas.addEventListener('touchstart', (e) => this.handleDown(e.touches[0]));
         this.canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             this.handleMove(e.touches[0]);
         });
         this.canvas.addEventListener('touchend', (e) => this.handleUp(e));
 
-        // Keyboard (Delete)
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && this.activeLayer) {
                 this.deleteActiveLayer();
@@ -105,8 +98,6 @@ export class Editor {
         if (layer) layer.selected = true;
     }
 
-    // --- Alignment & Z-Index ---
-
     alignSelectedLayer(alignment) {
         if (!this.activeLayer) return;
         const l = this.activeLayer;
@@ -144,8 +135,6 @@ export class Editor {
         }
     }
 
-    // --- Utilities ---
-
     fileToImage(file) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -158,7 +147,7 @@ export class Editor {
         });
     }
 
-    // --- Rendering ---
+    // --- Rendering & Smart Guides ---
 
     render() {
         this.ctx.fillStyle = this.backgroundColor;
@@ -167,6 +156,27 @@ export class Editor {
         this.layers.forEach(layer => {
             layer.render(this.ctx);
         });
+
+        // Draw Smart Guides
+        if (this.guides.length > 0) {
+            this.ctx.save();
+            this.ctx.strokeStyle = '#00aaff'; // Blue line requested
+            this.ctx.lineWidth = 1;
+            this.ctx.setLineDash([5, 5]);
+
+            this.guides.forEach(g => {
+                this.ctx.beginPath();
+                if (g.vertical) {
+                    this.ctx.moveTo(g.pos, 0);
+                    this.ctx.lineTo(g.pos, this.canvas.height);
+                } else {
+                    this.ctx.moveTo(0, g.pos);
+                    this.ctx.lineTo(this.canvas.width, g.pos);
+                }
+                this.ctx.stroke();
+            });
+            this.ctx.restore();
+        }
 
         if (this.activeLayer) {
             this.drawSelection(this.activeLayer);
@@ -182,31 +192,29 @@ export class Editor {
         const centerX = layer.x + w / 2;
         const centerY = layer.y + h / 2;
 
-        // Transform to match layer rotation
         ctx.translate(centerX, centerY);
         ctx.rotate(layer.rotation);
         ctx.translate(-centerX, -centerY);
 
-        // Box
         ctx.strokeStyle = '#00ff9d';
         ctx.lineWidth = 2;
         ctx.strokeRect(layer.x, layer.y, w, h);
 
-        // BR Handle (Resize)
         const handleSize = 12;
+
+        // Resize Handle
         ctx.fillStyle = '#fff';
         ctx.fillRect(layer.x + w - handleSize / 2, layer.y + h - handleSize / 2, handleSize, handleSize);
 
-        // Rotation Handle Logic (Visual Stick Top)
+        // Rotate Handle
         ctx.beginPath();
         ctx.moveTo(centerX, layer.y);
         ctx.lineTo(centerX, layer.y - 30);
         ctx.strokeStyle = '#00ff9d';
         ctx.stroke();
-
         ctx.beginPath();
         ctx.arc(centerX, layer.y - 30, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#00ff9d'; // Neon green handle
+        ctx.fillStyle = '#00ff9d';
         ctx.fill();
 
         ctx.restore();
@@ -228,14 +236,13 @@ export class Editor {
     handleDown(e) {
         const pos = this.getPointerPos(e);
 
-        // 1. Check for Handles
         if (this.activeLayer) {
             const l = this.activeLayer;
             const w = l.width * l.scaleX;
             const h = l.height * l.scaleY;
-            const handleSize = 30; // Hitbox radius
+            const handleSize = 30;
 
-            // BR Handle (Resize)
+            // Resize (BR)
             if (
                 pos.x >= l.x + w - handleSize && pos.x <= l.x + w + handleSize &&
                 pos.y >= l.y + h - handleSize && pos.y <= l.y + h + handleSize
@@ -245,7 +252,7 @@ export class Editor {
                 return;
             }
 
-            // Rotate Handle (Top Center - 30px up)
+            // Rotate (Top)
             if (
                 pos.x >= l.x + w / 2 - handleSize && pos.x <= l.x + w / 2 + handleSize &&
                 pos.y >= l.y - 45 && pos.y <= l.y - 15
@@ -256,7 +263,6 @@ export class Editor {
             }
         }
 
-        // 2. Check for Layer Hits
         let hitLayer = null;
         for (let i = this.layers.length - 1; i >= 0; i--) {
             if (this.layers[i].hitTest(pos.x, pos.y)) {
@@ -275,8 +281,6 @@ export class Editor {
                     this.render();
                 }
             } else if (this.currentTool === 'bucket' && hitLayer.type === 'image') {
-                // Default to white fill
-                // In real app, prompt for color or use picked color
                 hitLayer.floodFill(pos.x, pos.y, { r: 255, g: 255, b: 255, a: 255 });
                 this.render();
             } else if (this.currentTool === 'eraser' && hitLayer.type === 'image') {
@@ -298,6 +302,7 @@ export class Editor {
 
     handleMove(e) {
         const pos = this.getPointerPos(e);
+        this.guides = []; // Reset guides
 
         if (this.isResizing && this.activeLayer) {
             const l = this.activeLayer;
@@ -311,16 +316,56 @@ export class Editor {
             } else if (this.resizeHandle === 'rotate') {
                 const centerX = l.x + (l.width * l.scaleX) / 2;
                 const centerY = l.y + (l.height * l.scaleY) / 2;
-                // Calculate angle from center to mouse
                 const angle = Math.atan2(pos.y - centerY, pos.x - centerX);
-                // Adjust because handle is at -90deg (top)
                 l.rotation = angle + Math.PI / 2;
                 this.render();
             }
         } else if (this.isDragging && this.activeLayer) {
             if (this.currentTool === 'move') {
-                this.activeLayer.x = pos.x - this.dragOffset.x;
-                this.activeLayer.y = pos.y - this.dragOffset.y;
+                let nextX = pos.x - this.dragOffset.x;
+                let nextY = pos.y - this.dragOffset.y;
+
+                // --- Smart Guides Logic ---
+                const snapThreshold = 10;
+                const l = this.activeLayer;
+                const w = l.width * l.scaleX;
+                const h = l.height * l.scaleY;
+
+                // Centers
+                const centerX = nextX + w / 2;
+                const centerY = nextY + h / 2;
+
+                // Snap to Canvas Center
+                if (Math.abs(centerX - this.canvas.width / 2) < snapThreshold) {
+                    nextX = this.canvas.width / 2 - w / 2;
+                    this.guides.push({ vertical: true, pos: this.canvas.width / 2 });
+                }
+                if (Math.abs(centerY - this.canvas.height / 2) < snapThreshold) {
+                    nextY = this.canvas.height / 2 - h / 2;
+                    this.guides.push({ vertical: false, pos: this.canvas.height / 2 });
+                }
+
+                // Snap to other Layers (Edges)
+                this.layers.forEach(other => {
+                    if (other === l) return;
+                    const ow = other.width * other.scaleX;
+                    const oh = other.height * other.scaleY;
+
+                    // Top Align
+                    if (Math.abs(nextY - other.y) < snapThreshold) {
+                        nextY = other.y;
+                        this.guides.push({ vertical: false, pos: other.y });
+                    }
+                    // Bottom Align
+                    // Left Align
+                    if (Math.abs(nextX - other.x) < snapThreshold) {
+                        nextX = other.x;
+                        this.guides.push({ vertical: true, pos: other.x });
+                    }
+                });
+
+                this.activeLayer.x = nextX;
+                this.activeLayer.y = nextY;
                 this.render();
             } else if (this.currentTool === 'eraser' && this.activeLayer.type === 'image') {
                 this.activeLayer.applyEraser(pos.x, pos.y, 20);
@@ -333,6 +378,8 @@ export class Editor {
         this.isDragging = false;
         this.isResizing = false;
         this.resizeHandle = null;
+        this.guides = []; // Clear lines on drop
+        this.render();
     }
 
     getPixelColor(layer, globalX, globalY) {
