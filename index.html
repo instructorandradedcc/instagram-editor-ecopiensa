@@ -1,243 +1,927 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-
 <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description"
-        content="Editor de imágenes profesional para Instagram de la Fundación Ecopiensa Evolution. Recorta, edita y crea contenido visual impactante.">
-    <meta name="theme-color" content="#1a1a1a">
-    <link rel="manifest" href="public/manifest.json">
-    <title>Ecopiensa Editor | Instagram Edition</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="src/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ecopiensa Editor | Instagram Composer</title>
+    <!-- Iconos Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-hover: #2d2d2d;
+            --accent: #00ff9d;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border: #333;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: grid;
+            grid-template-rows: 60px 1fr;
+            grid-template-columns: 70px 1fr 300px;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            grid-column: 1 / -1;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        .logo { font-weight: 700; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
+        .logo span { color: var(--accent); }
+
+        .header-controls { display: flex; gap: 15px; align-items: center; }
+
+        button {
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        button:hover { border-color: var(--accent); color: var(--accent); }
+        button.primary { background: var(--accent); color: #000; font-weight: 600; border: none; }
+        button.primary:hover { opacity: 0.9; }
+
+        /* --- Toolbar Left --- */
+        .toolbar {
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            gap: 15px;
+        }
+
+        .tool-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+            position: relative;
+        }
+
+        .tool-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+        .tool-btn.active { background: rgba(0, 255, 157, 0.1); color: var(--accent); border-color: var(--accent); }
+        .tool-tooltip {
+            position: absolute; left: 120%; background: #000; padding: 5px 10px; 
+            border-radius: 4px; font-size: 0.8rem; pointer-events: none; opacity: 0; transition: opacity 0.2s; white-space: nowrap; z-index: 10;
+        }
+        .tool-btn:hover .tool-tooltip { opacity: 1; }
+
+        /* --- Canvas Area --- */
+        .workspace {
+            background-color: #0a0a0a;
+            background-image: radial-gradient(#222 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #canvas-container {
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            transition: transform 0.1s;
+        }
+
+        canvas { display: block; background: #1a1a1a; cursor: crosshair; }
+
+        /* --- Properties Panel Right --- */
+        .properties {
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-section { margin-bottom: 25px; }
+        .panel-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 10px; font-weight: 700; }
+
+        .control-group { margin-bottom: 15px; }
+        .control-label { display: block; font-size: 0.9rem; margin-bottom: 5px; }
+        
+        input[type="text"], input[type="number"], select {
+            width: 100%; background: var(--bg-dark); border: 1px solid var(--border); color: var(--text-main);
+            padding: 8px; border-radius: 4px; outline: none;
+        }
+        input:focus { border-color: var(--accent); }
+
+        input[type="range"] { width: 100%; accent-color: var(--accent); }
+        
+        .layer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        /* --- Instagram Preview Modal --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100; display: none;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.open { display: flex; }
+        
+        .ig-preview {
+            background: #000; width: 375px; height: 700px; border-radius: 20px;
+            border: 8px solid #333; overflow: hidden; position: relative;
+            display: flex; flex-direction: column;
+        }
+        .ig-header { height: 50px; border-bottom: 1px solid #333; display: flex; align-items: center; padding: 0 15px; font-size: 0.9rem; font-weight: bold; }
+        .ig-content { width: 100%; aspect-ratio: 1/1; background: #222; margin-top: 10px; }
+        .ig-content img { width: 100%; height: 100%; object-fit: contain; }
+        .ig-actions { padding: 10px 15px; display: flex; gap: 15px; }
+        .ig-caption { padding: 0 15px; font-size: 0.85rem; color: #eee; }
+        .close-modal { position: absolute; top: 10px; right: -40px; color: white; cursor: pointer; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body { grid-template-columns: 50px 1fr; grid-template-rows: 50px 1fr 200px; }
+            .properties { grid-column: 1 / -1; border-top: 1px solid var(--border); border-left: none; }
+            .header-controls span { display: none; }
+        }
+    </style>
 </head>
-
 <body>
-    <div id="app">
-        <header class="app-header">
-            <div class="logo">
-                <span class="eco-icon">🌱</span>
-                <h1>Ecopiensa <span class="highlight">Editor</span></h1>
-            </div>
-            <div class="header-controls">
-                <button id="btn-batch" class="btn-secondary" title="Visualizar Grid">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="3" y1="9" x2="21" y2="9"></line>
-                        <line x1="3" y1="15" x2="21" y2="15"></line>
-                        <line x1="9" y1="3" x2="9" y2="21"></line>
-                        <line x1="15" y1="3" x2="15" y2="21"></line>
-                    </svg>
-                    <span class="btn-text">Grid Visual</span>
-                </button>
 
-                <select id="export-format" class="btn-secondary"
-                    style="background-color: #0f1115; color: white; border-color: rgba(255,255,255,0.1); cursor: pointer; border-radius: 8px; padding: 0 10px;">
-                    <option value="image/png">PNG</option>
-                    <option value="image/jpeg">JPG</option>
-                    <option value="image/webp">WebP</option>
-                </select>
-
-                <button id="btn-export" class="btn-primary">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Exportar
-                </button>
-            </div>
-        </header>
-
-        <main class="editor-workspace">
-            <!-- Sidebar: Tools -->
-            <aside class="sidebar-tools">
-                <div class="tool-group">
-                    <h3>Capas</h3>
-                    <button class="tool-btn" id="btn-add-image" title="Agregar Imagen (Encima)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="12" y1="8" x2="12" y2="16"></line>
-                            <line x1="8" y1="12" x2="16" y2="12"></line>
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="tool-group">
-                    <h3>Básicos</h3>
-                    <button class="tool-btn active" data-tool="move" title="Mover">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M15 19l-3 3-3-3M9 9h6v6H9z"></path>
-                        </svg>
-                    </button>
-                    <button class="tool-btn" data-tool="crop" title="Recortar (Instagram)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M6 2v14a2 2 0 0 0 2 2h14"></path>
-                            <path d="M18 22V8a2 2 0 0 0-2-2H2"></path>
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="tool-group">
-                    <h3>Creativo</h3>
-                    <button class="tool-btn" data-tool="text" title="Texto">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M4 7V4h16v3M9 20h6M12 4v16"></path>
-                        </svg>
-                    </button>
-                    <button class="tool-btn" data-tool="magic-wand" title="Varita Mágica (Quitar Fondo)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="10" y1="13" x2="8" y2="13"></line>
-                            <line x1="6.3" y1="10.7" x2="6.3" y2="10.7"></line>
-                        </svg>
-                    </button>
-                    <button class="tool-btn" data-tool="bucket" title="Bote de Pintura (Rellenar)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M19 11l-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11z"></path>
-                            <path d="M5 2l5 5"></path>
-                            <path d="M2 13h15"></path>
-                            <path d="M22 13h-4"></path>
-                            <path d="M19 16l-3 3"></path>
-                        </svg>
-                    </button>
-                    <button class="tool-btn" data-tool="eraser" title="Borrador Manual">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L20 20Z"></path>
-                            <path d="M11 7L20 16"></path>
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="tool-group">
-                    <h3>Ajustes</h3>
-                    <button class="tool-btn" data-tool="filter" title="Filtros">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                        </svg>
-                    </button>
-                </div>
-            </aside>
-
-            <!-- Main Canvas Area -->
-            <section class="canvas-container">
-                <div class="canvas-wrapper" id="canvas-wrapper">
-                    <div class="empty-state" id="empty-state">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="1" class="upload-icon">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <polyline points="21 15 16 10 5 21"></polyline>
-                        </svg>
-                        <p>Arrastra imágenes aquí o pega con Ctrl+V</p>
-                        <button class="btn-primary-outline"
-                            onclick="document.getElementById('file-upload').click()">Seleccionar Imagen</button>
-                    </div>
-                    <canvas id="editor-canvas"></canvas>
-                </div>
-
-                <div class="zoom-controls">
-                    <button id="zoom-out">-</button>
-                    <span id="zoom-level">100%</span>
-                    <button id="zoom-in">+</button>
-                </div>
-            </section>
-
-            <!-- Right Panel: Properties/Layers -->
-            <aside class="sidebar-properties">
-                <div class="panel-header">
-                    <h2>Propiedades</h2>
-                </div>
-                <div class="properties-content" id="properties-panel">
-                    <p class="hint-text">Selecciona una herramienta o capa para ver las opciones.</p>
-
-                    <div id="general-options" class="options-group">
-                        <h3>Organizar</h3>
-                        <div class="header-controls"
-                            style="justify-content: start; flex-wrap: wrap; margin-bottom: 12px; gap: 8px;">
-                            <button class="btn-secondary" id="btn-center" style="padding: 6px;" title="Centrar">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <rect x="2" y="2" width="20" height="20" rx="2"></rect>
-                                    <circle cx="12" cy="12" r="2"></circle>
-                                </svg>
-                            </button>
-                            <button class="btn-secondary" id="btn-back" title="Enviar al Fondo">Bajar</button>
-                            <button class="btn-secondary" id="btn-front" title="Traer al Frente">Subir</button>
-                        </div>
-                    </div>
-
-                    <div id="crop-options" class="options-group hidden">
-                        <h3>Formato Instagram</h3>
-                        <div class="ratio-grid">
-                            <button class="ratio-btn" data-ratio="1:1">1:1<br><small>Cuadrado</small></button>
-                            <button class="ratio-btn" data-ratio="4:5">4:5<br><small>Retrato</small></button>
-                            <button class="ratio-btn" data-ratio="1.91:1">1.91:1<br><small>Paisaje</small></button>
-                            <button class="ratio-btn" data-ratio="9:16">9:16<br><small>Historia</small></button>
-                        </div>
-                    </div>
-
-                    <div id="text-options" class="options-group hidden">
-                        <h3>Texto</h3>
-                        <div class="input-group">
-                            <label>Fuente</label>
-                            <select id="font-family">
-                                <option value="Outfit">Outfit</option>
-                                <option value="Arial">Arial</option>
-                                <option value="Times New Roman">Times New Roman</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label>Tamaño</label>
-                            <input type="range" id="font-size" min="10" max="200" value="40">
-                        </div>
-                        <div class="input-group">
-                            <label>Color</label>
-                            <input type="color" id="text-color" value="#ffffff">
-                        </div>
-                    </div>
-                </div>
-            </aside>
-        </main>
-    </div>
-
-    <!-- Shared input for all uploads -->
-    <input type="file" id="file-upload" accept="image/*" hidden>
-
-    <!-- Grid Preview Modal -->
-    <div id="grid-modal" class="modal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 200; align-items: center; justify-content: center; flex-direction: column;">
-        <h2 style="color: #fff; margin-bottom: 20px;">Vista Previa Instagram</h2>
-        <div id="grid-preview-container"
-            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; max-width: 400px; width: 100%;">
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <img id="current-preview" class="grid-slot"
-                style="aspect-ratio: 1; width: 100%; object-fit: cover; border: 2px solid #00ff9d;">
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
-            <div class="grid-slot" style="aspect-ratio: 1; background: #222;"></div>
+    <!-- Header -->
+    <header>
+        <div class="logo">
+            <i data-lucide="layout-grid"></i>
+            Ecopiensa<span>Editor</span>
         </div>
-        <button id="btn-close-grid" class="btn-primary-outline" style="margin-top: 20px;">Cerrar Visual</button>
+        <div class="header-controls">
+            <div class="zoom-controls">
+                <button onclick="app.setZoom(-0.1)"><i data-lucide="minus"></i></button>
+                <span id="zoom-level">100%</span>
+                <button onclick="app.setZoom(0.1)"><i data-lucide="plus"></i></button>
+            </div>
+            <button onclick="app.toggleGridPreview()"><i data-lucide="eye"></i> <span>Feed Preview</span></button>
+            <select id="export-format" style="width: auto;">
+                <option value="image/png">PNG</option>
+                <option value="image/jpeg">JPG</option>
+                <option value="image/webp">WebP</option>
+            </select>
+            <button class="primary" onclick="app.exportImage()"><i data-lucide="download"></i> <span>Exportar</span></button>
+        </div>
+    </header>
+
+    <!-- Toolbar -->
+    <aside class="toolbar">
+        <button class="tool-btn active" onclick="app.setTool('move')" id="tool-move">
+            <i data-lucide="move"></i><span class="tool-tooltip">Mover/Seleccionar (V)</span>
+        </button>
+        <button class="tool-btn" onclick="document.getElementById('file-upload').click()">
+            <i data-lucide="image-plus"></i><span class="tool-tooltip">Añadir Imagen</span>
+        </button>
+        <button class="tool-btn" onclick="app.addTextLayer()">
+            <i data-lucide="type"></i><span class="tool-tooltip">Añadir Texto (T)</span>
+        </button>
+        <div style="height: 1px; width: 30px; background: #333; margin: 5px 0;"></div>
+        <button class="tool-btn" onclick="app.setTool('eraser')" id="tool-eraser">
+            <i data-lucide="eraser"></i><span class="tool-tooltip">Borrador (E)</span>
+        </button>
+        <button class="tool-btn" onclick="app.setTool('magic-wand')" id="tool-magic-wand">
+            <i data-lucide="wand-2"></i><span class="tool-tooltip">Varita Mágica (W)</span>
+        </button>
+        <input type="file" id="file-upload" accept="image/*" hidden onchange="app.handleImageUpload(this)">
+    </aside>
+
+    <!-- Workspace -->
+    <main class="workspace" id="workspace">
+        <div id="canvas-container">
+            <canvas id="main-canvas" width="1080" height="1080"></canvas>
+        </div>
+    </main>
+
+    <!-- Properties Panel -->
+    <aside class="properties" id="properties-panel">
+        <div class="panel-section">
+            <div class="panel-title">Lienzo</div>
+            <div class="control-group">
+                <label class="control-label">Color de Fondo</label>
+                <input type="color" id="bg-color" value="#1a1a1a" style="height: 40px; width: 100%;">
+            </div>
+        </div>
+
+        <div id="layer-properties" style="display:none;">
+            <div class="panel-section">
+                <div class="panel-title" id="prop-title">Propiedades de Capa</div>
+                
+                <!-- Text Controls -->
+                <div id="text-controls" style="display:none;">
+                    <div class="control-group">
+                        <label class="control-label">Contenido</label>
+                        <input type="text" id="prop-text-content">
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Fuente</label>
+                        <select id="prop-font">
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Verdana">Verdana</option>
+                            <option value="Impact">Impact</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Color</label>
+                        <input type="color" id="prop-color" style="height: 40px;">
+                    </div>
+                </div>
+
+                <!-- Transform Controls -->
+                <div class="control-group">
+                    <label class="control-label">Opacidad</label>
+                    <input type="range" id="prop-opacity" min="0" max="1" step="0.01">
+                </div>
+
+                <!-- Ordering/Actions -->
+                <div class="panel-title" style="margin-top: 20px;">Acciones</div>
+                <div class="layer-actions">
+                    <button onclick="app.reorderLayer('up')"><i data-lucide="arrow-up"></i> Subir</button>
+                    <button onclick="app.reorderLayer('down')"><i data-lucide="arrow-down"></i> Bajar</button>
+                    <button onclick="app.centerLayer()"><i data-lucide="align-center"></i> Centrar</button>
+                    <button onclick="app.deleteLayer()" style="background: #ff4444; color: white; border: none;"><i data-lucide="trash-2"></i></button>
+                </div>
+            </div>
+            
+            <!-- Tool Specific Settings -->
+            <div id="tool-settings" class="panel-section" style="display:none; border-top: 1px solid #333; padding-top: 20px;">
+                <div class="panel-title">Ajustes de Herramienta</div>
+                <div id="eraser-settings">
+                    <label class="control-label">Tamaño Borrador: <span id="eraser-size-val">20</span>px</label>
+                    <input type="range" id="eraser-size" min="5" max="100" value="20">
+                </div>
+                <div id="wand-settings" style="display:none;">
+                    <label class="control-label">Tolerancia: <span id="wand-tol-val">30</span></label>
+                    <input type="range" id="wand-tol" min="0" max="100" value="30">
+                </div>
+            </div>
+        </div>
+        
+        <div id="no-selection-msg" style="color: #666; font-style: italic; text-align: center; margin-top: 20px;">
+            Selecciona un objeto para editar sus propiedades.
+        </div>
+    </aside>
+
+    <!-- Preview Modal -->
+    <div class="modal-overlay" id="preview-modal">
+        <div style="position: relative;">
+            <div class="close-modal" onclick="app.toggleGridPreview()"><i data-lucide="x" size="32"></i></div>
+            <div class="ig-preview">
+                <div class="ig-header">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #555; margin-right: 10px;"></div>
+                    ecopiensa_oficial
+                </div>
+                <div class="ig-content">
+                    <img id="preview-img" src="">
+                </div>
+                <div class="ig-actions">
+                    <i data-lucide="heart"></i>
+                    <i data-lucide="message-circle"></i>
+                    <i data-lucide="send"></i>
+                </div>
+                <div class="ig-caption">
+                    <strong>ecopiensa_oficial</strong> Nueva composición creada con Ecopiensa Editor. #design #eco #instagram
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script type="module" src="src/main.js"></script>
-</body>
+    <!-- Application Logic -->
+    <script type="module">
+        lucide.createIcons();
 
+        // --- Clases Principales ---
+
+        class Layer {
+            constructor(type, id) {
+                this.type = type;
+                this.id = id;
+                this.x = 1080 / 2;
+                this.y = 1080 / 2;
+                this.rotation = 0;
+                this.scale = 1;
+                this.opacity = 1;
+                this.width = 0;
+                this.height = 0;
+                this.selected = false;
+            }
+            
+            // Verifica si un punto (x,y) está dentro del objeto rotado
+            contains(mx, my) {
+                // Transformar el punto del ratón al espacio local del objeto
+                const dx = mx - this.x;
+                const dy = my - this.y;
+                const cos = Math.cos(-this.rotation);
+                const sin = Math.sin(-this.rotation);
+                const localX = dx * cos - dy * sin;
+                const localY = dx * sin + dy * cos;
+                
+                return Math.abs(localX) < (this.width * this.scale) / 2 && 
+                       Math.abs(localY) < (this.height * this.scale) / 2;
+            }
+        }
+
+        class ImageLayer extends Layer {
+            constructor(img, id) {
+                super('image', id);
+                this.originalImage = img;
+                this.width = img.width;
+                this.height = img.height;
+                
+                // Canvas offscreen para edición de píxeles (borrador/varita)
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.ctx = this.canvas.getContext('2d');
+                this.ctx.drawImage(img, 0, 0);
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.scale(this.scale, this.scale);
+                ctx.globalAlpha = this.opacity;
+                // Dibujar desde el centro
+                ctx.drawImage(this.canvas, -this.width/2, -this.height/2);
+                ctx.restore();
+            }
+
+            // Operaciones destructivas
+            erase(x, y, radius) {
+                // Convertir coords globales a locales
+                const dx = x - this.x;
+                const dy = y - this.y;
+                const cos = Math.cos(-this.rotation);
+                const sin = Math.sin(-this.rotation);
+                
+                // Coordenadas en el canvas original sin escala
+                const localX = (dx * cos - dy * sin) / this.scale + this.width/2;
+                const localY = (dx * sin + dy * cos) / this.scale + this.height/2;
+
+                this.ctx.save();
+                this.ctx.globalCompositeOperation = 'destination-out';
+                this.ctx.beginPath();
+                this.ctx.arc(localX, localY, radius / this.scale, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+
+            magicWand(x, y, tolerance) {
+                 // Convertir coords globales a locales (igual que erase)
+                const dx = x - this.x;
+                const dy = y - this.y;
+                const cos = Math.cos(-this.rotation);
+                const sin = Math.sin(-this.rotation);
+                const localX = Math.floor((dx * cos - dy * sin) / this.scale + this.width/2);
+                const localY = Math.floor((dx * sin + dy * cos) / this.scale + this.height/2);
+
+                if(localX < 0 || localX >= this.width || localY < 0 || localY >= this.height) return;
+
+                const imageData = this.ctx.getImageData(0, 0, this.width, this.height);
+                const data = imageData.data;
+                const targetIdx = (localY * this.width + localX) * 4;
+                const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2], targetA = data[targetIdx+3];
+
+                if(targetA === 0) return; // Ya es transparente
+
+                // Recorrer todos los pixeles (Versión simplificada: no es flood fill, es reemplazo de color global en la capa)
+                // Para flood fill real se necesita una pila recursiva, puede ser lento en JS puro para 1080p sin workers.
+                // Implementaremos "Magic Wand Global" (selecciona todo el color similar en la capa) para eficiencia.
+                
+                for(let i = 0; i < data.length; i += 4) {
+                    if (data[i+3] === 0) continue;
+                    
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const diff = Math.abs(r - targetR) + Math.abs(g - targetG) + Math.abs(b - targetB);
+                    
+                    if (diff <= tolerance * 3) { // Tolerancia simple
+                        data[i+3] = 0; // Hacer transparente
+                    }
+                }
+                
+                this.ctx.putImageData(imageData, 0, 0);
+            }
+        }
+
+        class TextLayer extends Layer {
+            constructor(text, id) {
+                super('text', id);
+                this.text = text;
+                this.fontFamily = 'Arial';
+                this.fontSize = 60;
+                this.color = '#ffffff';
+                this.measureDimensions();
+            }
+
+            measureDimensions() {
+                const ctx = document.createElement('canvas').getContext('2d');
+                ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+                const metrics = ctx.measureText(this.text);
+                this.width = metrics.width;
+                this.height = this.fontSize; // Approx
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.scale(this.scale, this.scale);
+                ctx.globalAlpha = this.opacity;
+                ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+                ctx.fillStyle = this.color;
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.text, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        // --- Core Application ---
+
+        class EditorApp {
+            constructor() {
+                this.canvas = document.getElementById('main-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.layers = [];
+                this.activeLayer = null;
+                this.tool = 'move'; // move, eraser, magic-wand
+                this.zoom = 1;
+                this.isDragging = false;
+                this.isRotating = false;
+                this.isResizing = false;
+                this.lastMouse = { x: 0, y: 0 };
+                this.bgColor = '#1a1a1a';
+                
+                // Config
+                this.resizeHandleSize = 15;
+                
+                this.initEvents();
+                this.loop();
+            }
+
+            initEvents() {
+                // Drag & Drop
+                const workspace = document.getElementById('workspace');
+                workspace.addEventListener('dragover', (e) => e.preventDefault());
+                workspace.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if(file && file.type.startsWith('image/')) this.loadImage(file);
+                });
+
+                // Paste
+                window.addEventListener('paste', (e) => {
+                    const item = e.clipboardData.items[0];
+                    if (item && item.type.indexOf("image") !== -1) {
+                        this.loadImage(item.getAsFile());
+                    }
+                });
+
+                // Canvas Interactions
+                this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+                
+                // Touch Support Basic
+                this.canvas.addEventListener('touchstart', (e) => {
+                    const touch = e.touches[0];
+                    this.handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: ()=>{} });
+                }, {passive: false});
+
+                // UI Bindings
+                document.getElementById('bg-color').addEventListener('input', (e) => {
+                    this.bgColor = e.target.value;
+                });
+                
+                // Property Bindings
+                document.getElementById('prop-opacity').addEventListener('input', (e) => {
+                    if(this.activeLayer) this.activeLayer.opacity = e.target.value;
+                });
+                document.getElementById('prop-text-content').addEventListener('input', (e) => {
+                    if(this.activeLayer && this.activeLayer.type === 'text') {
+                        this.activeLayer.text = e.target.value;
+                        this.activeLayer.measureDimensions();
+                    }
+                });
+                document.getElementById('prop-font').addEventListener('change', (e) => {
+                    if(this.activeLayer && this.activeLayer.type === 'text') {
+                        this.activeLayer.fontFamily = e.target.value;
+                        this.activeLayer.measureDimensions();
+                    }
+                });
+                document.getElementById('prop-color').addEventListener('input', (e) => {
+                    if(this.activeLayer && this.activeLayer.type === 'text') this.activeLayer.color = e.target.value;
+                });
+                
+                // Keyboard
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') this.deleteLayer();
+                    if (e.key === 'v') this.setTool('move');
+                    if (e.key === 'e') this.setTool('eraser');
+                });
+            }
+
+            loadImage(file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Resize huge images to max 1500px to save memory
+                        let w = img.width, h = img.height;
+                        if(w > 1500 || h > 1500) {
+                            const ratio = Math.min(1500/w, 1500/h);
+                            w *= ratio; h *= ratio;
+                        }
+                        const layer = new ImageLayer(img, Date.now());
+                        // Fit to canvas if too big
+                        if(layer.width > 1080) {
+                            layer.scale = 1080 / layer.width * 0.8;
+                        }
+                        this.addLayer(layer);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            addTextLayer() {
+                const layer = new TextLayer('Nuevo Texto', Date.now());
+                this.addLayer(layer);
+                this.setTool('move');
+            }
+
+            addLayer(layer) {
+                this.layers.push(layer);
+                this.setActiveLayer(layer);
+            }
+
+            deleteLayer() {
+                if(!this.activeLayer) return;
+                this.layers = this.layers.filter(l => l !== this.activeLayer);
+                this.setActiveLayer(null);
+            }
+
+            reorderLayer(direction) {
+                if(!this.activeLayer) return;
+                const idx = this.layers.indexOf(this.activeLayer);
+                if(direction === 'up' && idx < this.layers.length - 1) {
+                    [this.layers[idx], this.layers[idx+1]] = [this.layers[idx+1], this.layers[idx]];
+                } else if (direction === 'down' && idx > 0) {
+                    [this.layers[idx], this.layers[idx-1]] = [this.layers[idx-1], this.layers[idx]];
+                }
+            }
+            
+            centerLayer() {
+                if(this.activeLayer) {
+                    this.activeLayer.x = 1080/2;
+                    this.activeLayer.y = 1080/2;
+                }
+            }
+
+            setActiveLayer(layer) {
+                if(this.activeLayer) this.activeLayer.selected = false;
+                this.activeLayer = layer;
+                if(layer) layer.selected = true;
+                this.updatePropertiesPanel();
+            }
+
+            setTool(name) {
+                this.tool = name;
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                const btn = document.getElementById(`tool-${name}`);
+                if(btn) btn.classList.add('active');
+                
+                // Show/Hide tool settings in panel
+                const toolSettings = document.getElementById('tool-settings');
+                const eraserSet = document.getElementById('eraser-settings');
+                const wandSet = document.getElementById('wand-settings');
+                
+                toolSettings.style.display = (name === 'eraser' || name === 'magic-wand') ? 'block' : 'none';
+                eraserSet.style.display = name === 'eraser' ? 'block' : 'none';
+                wandSet.style.display = name === 'magic-wand' ? 'block' : 'none';
+            }
+            
+            setZoom(delta) {
+                this.zoom = Math.max(0.1, Math.min(3, this.zoom + delta));
+                const container = document.getElementById('canvas-container');
+                container.style.transform = `scale(${this.zoom})`;
+                document.getElementById('zoom-level').innerText = Math.round(this.zoom * 100) + '%';
+            }
+
+            updatePropertiesPanel() {
+                const noSel = document.getElementById('no-selection-msg');
+                const props = document.getElementById('layer-properties');
+                
+                if(!this.activeLayer) {
+                    noSel.style.display = 'block';
+                    props.style.display = 'none';
+                    return;
+                }
+                
+                noSel.style.display = 'none';
+                props.style.display = 'block';
+                
+                const textControls = document.getElementById('text-controls');
+                document.getElementById('prop-opacity').value = this.activeLayer.opacity;
+                
+                if(this.activeLayer.type === 'text') {
+                    textControls.style.display = 'block';
+                    document.getElementById('prop-text-content').value = this.activeLayer.text;
+                    document.getElementById('prop-font').value = this.activeLayer.fontFamily;
+                    document.getElementById('prop-color').value = this.activeLayer.color;
+                } else {
+                    textControls.style.display = 'none';
+                }
+            }
+
+            // --- Mouse / Touch Logic ---
+            
+            getMousePos(evt) {
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                return {
+                    x: (evt.clientX - rect.left) * scaleX,
+                    y: (evt.clientY - rect.top) * scaleY
+                };
+            }
+
+            handleMouseDown(e) {
+                const pos = this.getMousePos(e);
+                this.lastMouse = pos;
+                
+                if (this.tool === 'move') {
+                    // Check handles first if active
+                    if(this.activeLayer && this.activeLayer.selected) {
+                        if (this.checkRotationHandle(pos)) {
+                            this.isRotating = true;
+                            return;
+                        }
+                        if (this.checkResizeHandle(pos)) {
+                            this.isResizing = true;
+                            return;
+                        }
+                    }
+
+                    // Hit detection (reverse order for top-most)
+                    let clickedLayer = null;
+                    for(let i = this.layers.length - 1; i >= 0; i--) {
+                        if(this.layers[i].contains(pos.x, pos.y)) {
+                            clickedLayer = this.layers[i];
+                            break;
+                        }
+                    }
+
+                    if(clickedLayer) {
+                        this.setActiveLayer(clickedLayer);
+                        this.isDragging = true;
+                    } else {
+                        this.setActiveLayer(null);
+                    }
+                } else if (this.activeLayer && this.activeLayer.type === 'image') {
+                    if (this.tool === 'eraser') {
+                        const size = parseInt(document.getElementById('eraser-size').value);
+                        this.activeLayer.erase(pos.x, pos.y, size);
+                        this.isDragging = true; // Use dragging flag for continuous erasing
+                    } else if (this.tool === 'magic-wand') {
+                        const tol = parseInt(document.getElementById('wand-tol').value);
+                        this.activeLayer.magicWand(pos.x, pos.y, tol);
+                    }
+                }
+            }
+
+            handleMouseMove(e) {
+                const pos = this.getMousePos(e);
+
+                if (this.tool === 'move') {
+                    if (this.isDragging && this.activeLayer) {
+                        // Calculate Snap
+                        let nx = this.activeLayer.x + (pos.x - this.lastMouse.x);
+                        let ny = this.activeLayer.y + (pos.y - this.lastMouse.y);
+                        
+                        // Smart Guides (Simple center snap)
+                        if (Math.abs(nx - 1080/2) < 10) nx = 1080/2;
+                        if (Math.abs(ny - 1080/2) < 10) ny = 1080/2;
+
+                        this.activeLayer.x = nx;
+                        this.activeLayer.y = ny;
+                    } else if (this.isRotating && this.activeLayer) {
+                        const dx = pos.x - this.activeLayer.x;
+                        const dy = pos.y - this.activeLayer.y;
+                        this.activeLayer.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+                    } else if (this.isResizing && this.activeLayer) {
+                        // Simple scale based on distance from center
+                        const dx = pos.x - this.activeLayer.x;
+                        const dy = pos.y - this.activeLayer.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        // Assuming corner drag is roughly 45deg, adjust scale
+                        const baseSize = Math.sqrt(Math.pow(this.activeLayer.width/2, 2) + Math.pow(this.activeLayer.height/2, 2));
+                        this.activeLayer.scale = dist / baseSize;
+                    }
+                } else if (this.tool === 'eraser' && this.isDragging && this.activeLayer) {
+                    const size = parseInt(document.getElementById('eraser-size').value);
+                    this.activeLayer.erase(pos.x, pos.y, size);
+                }
+
+                this.lastMouse = pos;
+            }
+
+            handleMouseUp() {
+                this.isDragging = false;
+                this.isRotating = false;
+                this.isResizing = false;
+            }
+
+            // --- Drawing Helpers ---
+
+            checkRotationHandle(pos) {
+                const l = this.activeLayer;
+                // Handle pos is roughly top center offset
+                const cx = l.x + Math.sin(l.rotation) * (l.height * l.scale / 2 + 40);
+                const cy = l.y - Math.cos(l.rotation) * (l.height * l.scale / 2 + 40);
+                return Math.abs(pos.x - cx) < 10 && Math.abs(pos.y - cy) < 10;
+            }
+
+            checkResizeHandle(pos) {
+                // Simplified: Just checks bottom-right corner for MVP
+                const l = this.activeLayer;
+                const cos = Math.cos(l.rotation);
+                const sin = Math.sin(l.rotation);
+                const dx = l.width/2 * l.scale;
+                const dy = l.height/2 * l.scale;
+                
+                const cx = l.x + dx*cos - dy*sin;
+                const cy = l.y + dx*sin + dy*cos;
+                
+                return Math.abs(pos.x - cx) < 15 && Math.abs(pos.y - cy) < 15;
+            }
+
+            drawUI(ctx) {
+                if(!this.activeLayer || !this.activeLayer.selected) return;
+                
+                const l = this.activeLayer;
+                ctx.save();
+                ctx.translate(l.x, l.y);
+                ctx.rotate(l.rotation);
+                
+                // Bounding Box
+                ctx.strokeStyle = '#00ff9d';
+                ctx.lineWidth = 2;
+                const w = l.width * l.scale;
+                const h = l.height * l.scale;
+                ctx.strokeRect(-w/2, -h/2, w, h);
+                
+                // Rotation Handle Line
+                ctx.beginPath();
+                ctx.moveTo(0, -h/2);
+                ctx.lineTo(0, -h/2 - 40);
+                ctx.stroke();
+
+                // Handles
+                ctx.fillStyle = '#00ff9d';
+                
+                // Rot Handle
+                ctx.beginPath();
+                ctx.arc(0, -h/2 - 40, 6, 0, Math.PI*2);
+                ctx.fill();
+
+                // Resize Handle (Bottom Right)
+                ctx.beginPath();
+                ctx.arc(w/2, h/2, 6, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.restore();
+                
+                // Eraser Cursor
+                if(this.tool === 'eraser') {
+                    const size = parseInt(document.getElementById('eraser-size').value);
+                    const mouse = this.lastMouse;
+                    ctx.save();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(mouse.x, mouse.y, size, 0, Math.PI*2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Guides
+                if(this.isDragging && this.tool === 'move') {
+                    if(Math.abs(l.x - 1080/2) < 1) {
+                        ctx.beginPath(); ctx.moveTo(1080/2, 0); ctx.lineTo(1080/2, 1080);
+                        ctx.strokeStyle = '#00a8ff'; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+                    }
+                    if(Math.abs(l.y - 1080/2) < 1) {
+                        ctx.beginPath(); ctx.moveTo(0, 1080/2); ctx.lineTo(1080, 1080/2);
+                        ctx.strokeStyle = '#00a8ff'; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+                    }
+                }
+            }
+
+            loop() {
+                // Clear
+                this.ctx.fillStyle = this.bgColor;
+                this.ctx.fillRect(0, 0, 1080, 1080);
+
+                // Draw Layers
+                this.layers.forEach(layer => layer.draw(this.ctx));
+
+                // Draw UI Overlay
+                this.drawUI(this.ctx);
+
+                requestAnimationFrame(this.loop.bind(this));
+            }
+
+            // --- Export & Preview ---
+            
+            handleImageUpload(input) {
+                if (input.files && input.files[0]) {
+                    this.loadImage(input.files[0]);
+                }
+            }
+
+            exportImage() {
+                // Deseleccionar temporalmente para limpiar UI
+                const prevSelection = this.activeLayer;
+                this.setActiveLayer(null);
+                // Render one frame immediately
+                this.ctx.fillStyle = this.bgColor;
+                this.ctx.fillRect(0, 0, 1080, 1080);
+                this.layers.forEach(layer => layer.draw(this.ctx));
+                
+                const format = document.getElementById('export-format').value;
+                const link = document.createElement('a');
+                link.download = `ecopiensa-design.${format.split('/')[1]}`;
+                link.href = this.canvas.toDataURL(format, 0.9);
+                link.click();
+
+                // Restore
+                this.setActiveLayer(prevSelection);
+            }
+
+            toggleGridPreview() {
+                const modal = document.getElementById('preview-modal');
+                const isOpen = modal.classList.contains('open');
+                
+                if(!isOpen) {
+                    // Generate preview
+                    const prevSelection = this.activeLayer;
+                    this.setActiveLayer(null);
+                    this.ctx.fillStyle = this.bgColor;
+                    this.ctx.fillRect(0, 0, 1080, 1080);
+                    this.layers.forEach(layer => layer.draw(this.ctx));
+                    
+                    document.getElementById('preview-img').src = this.canvas.toDataURL();
+                    this.setActiveLayer(prevSelection);
+                    modal.classList.add('open');
+                } else {
+                    modal.classList.remove('open');
+                }
+            }
+        }
+
+        // Initialize
+        window.app = new EditorApp();
+        
+        // Update eraser size display
+        document.getElementById('eraser-size').addEventListener('input', (e) => {
+            document.getElementById('eraser-size-val').innerText = e.target.value;
+        });
+        document.getElementById('wand-tol').addEventListener('input', (e) => {
+            document.getElementById('wand-tol-val').innerText = e.target.value;
+        });
+
+    </script>
+</body>
 </html>
