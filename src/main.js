@@ -11,12 +11,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Editor
     const editor = new Editor(canvas);
 
-    // File Upload Handling
+    // 1. File Upload (Button & Input)
+    // Both the empty state button and the sidebar "+" button trigger this input
     fileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
             handleImageUpload(e.target.files[0]);
+            // Reset input so same file can be selected again
+            fileInput.value = '';
         }
     });
+
+    // Helper: Trigger upload when sidebar button clicked
+    const btnAddImage = document.getElementById('btn-add-image');
+    if (btnAddImage) {
+        btnAddImage.addEventListener('click', () => {
+            fileInput.click();
+        });
+    }
 
     // Paste Handling (Ctrl+V)
     window.addEventListener('paste', (e) => {
@@ -51,28 +62,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tool Switching Logic
     const toolBtns = document.querySelectorAll('.tool-btn');
-    const optionsGroups = document.querySelectorAll('.options-group');
 
     toolBtns.forEach(btn => {
+        // Skip the "Add Image" button from the selection logic since it's an action, not a mode
+        if (btn.id === 'btn-add-image') return;
+
         btn.addEventListener('click', () => {
             // Remove active class from all
-            toolBtns.forEach(b => b.classList.remove('active'));
+            toolBtns.forEach(b => {
+                if (b.id !== 'btn-add-image') b.classList.remove('active');
+            });
             // Add to clicked
             btn.classList.add('active');
 
             const tool = btn.dataset.tool;
-            let editorTool = tool;
+            let editorTool = tool; // Default map
 
-            // Mapping
+            // Special mappings
             if (tool === 'text') {
                 editor.addTextLayer();
-                editorTool = 'move';
+                editorTool = 'move'; // Switch back to move after adding
             } else if (tool === 'magic-wand') {
                 editorTool = 'wand';
-                alert('Herramienta Varita Mágica: Haz clic en el color del fondo que quieras borrar.');
+                // alert('Varita: Clic en el color a borrar');
             } else if (tool === 'bucket') {
                 editorTool = 'bucket';
-                alert('Rellenar: Haz clic para pintar un área del color Blanco (Por defecto).');
+                // alert('Bote: Clic para rellenar de blanco');
             } else if (tool === 'crop') {
                 editorTool = 'move';
             }
@@ -83,21 +98,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showProperties(toolName) {
-        // Hide all specific option groups
-        document.getElementById('crop-options').classList.add('hidden');
-        document.getElementById('text-options').classList.add('hidden');
+        const cropOpts = document.getElementById('crop-options');
+        const textOpts = document.getElementById('text-options');
+        if (cropOpts) cropOpts.classList.add('hidden');
+        if (textOpts) textOpts.classList.add('hidden');
 
-        // Always show general options (Align/Order) unless specific tool obscures it
-        // Actually, alignment is useful for everything.
-
-        hintText.style.display = 'none';
+        if (hintText) hintText.style.display = 'none';
 
         if (toolName === 'crop') {
-            document.getElementById('crop-options').classList.remove('hidden');
+            if (cropOpts) cropOpts.classList.remove('hidden');
         } else if (toolName === 'text') {
-            document.getElementById('text-options').classList.remove('hidden');
-        } else {
-            // Default hint
+            if (textOpts) textOpts.classList.remove('hidden');
         }
     }
 
@@ -115,9 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    fontSizeInput.addEventListener('input', updateTextProps);
-    colorInput.addEventListener('input', updateTextProps);
-    fontSelect.addEventListener('change', updateTextProps);
+    if (fontSizeInput) fontSizeInput.addEventListener('input', updateTextProps);
+    if (colorInput) colorInput.addEventListener('input', updateTextProps);
+    if (fontSelect) fontSelect.addEventListener('change', updateTextProps);
 
     // Alignment Controls
     document.getElementById('btn-center').addEventListener('click', () => editor.alignSelectedLayer('center'));
@@ -128,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-batch').addEventListener('click', () => {
         const modal = document.getElementById('grid-modal');
         const img = document.getElementById('current-preview');
-        img.src = editor.export(); // Use current working image
+        img.src = editor.export();
         modal.style.display = 'flex';
     });
 
@@ -153,10 +164,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // PWA Registration
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').then(registration => {
-                console.log('SW registered: ', registration);
-            }).catch(registrationError => {
-                console.log('SW registration failed: ', registrationError);
+            navigator.serviceWorker.register('./sw.js').then(registration => { // Relative path
+                console.log('SW registered');
+            }).catch(err => {
+                console.log('SW failed', err);
             });
         });
     }
