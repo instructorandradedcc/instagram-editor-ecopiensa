@@ -313,6 +313,7 @@
         <!-- Hidden Inputs -->
         <input type="file" id="file-upload" accept="image/*" hidden onchange="app.handleImageUpload(this)">
         <input type="file" id="file-replace" accept="image/*" hidden onchange="app.handleImageReplace(this)">
+        <input type="file" id="bg-upload" accept="image/*" hidden onchange="app.handleBackgroundUpload(this)">
     </aside>
 
     <!-- Workspace -->
@@ -335,6 +336,16 @@
             <div class="control-group">
                 <label class="control-label">Color de Fondo</label>
                 <input type="color" id="bg-color" value="#1a1a1a" style="height: 40px; width: 100%;">
+            </div>
+            <div class="control-group">
+                <label class="control-label">Imagen de Fondo</label>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="document.getElementById('bg-upload').click()" style="flex:1;"><i data-lucide="image"></i> Subir Fondo</button>
+                    <button onclick="app.clearBackground()" style="width:40px; justify-content:center;" title="Quitar Fondo"><i data-lucide="trash-2"></i></button>
+                </div>
+                <div style="font-size: 0.75rem; color: #777; margin-top: 5px;">
+                    Se ajusta automáticamente a 1080x1080
+                </div>
             </div>
         </div>
 
@@ -402,7 +413,7 @@
                 
                 <div id="crop-settings" style="display:none;">
                     <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 10px;">
-                        Selecciona un área rectangular. Todo lo que quede <strong>fuera</strong> del rectángulo será eliminado.
+                        Selecciona un área rectangular sobre la <strong>capa seleccionada</strong>. Lo que quede fuera se borrará.
                     </div>
                     <button class="primary" style="width: 100%;" disabled id="apply-crop-btn">Aplicar Recorte</button>
                 </div>
@@ -556,10 +567,6 @@
 
             serialize() {
                 const base = super.serialize();
-                // Store minimal data. Storing full ImageData repeatedly crashes memory.
-                // We rely on the internal canvas state. 
-                // For a robust undo with pixel manipulation (erase/fill), we DO need ImageData.
-                // Optimizing: only store imageData if modified? For now, we keep it but be careful.
                 return {
                     ...base,
                     originalImage: this.originalImage,
@@ -625,9 +632,10 @@
                         const gx = (sx * cos - sy * sin) + this.x;
                         const gy = (sx * sin + sy * cos) + this.y;
                         
+                        // Check against Global Selection Rect
                         if (gx < rect.x || gx > rect.x + rect.w || gy < rect.y || gy > rect.y + rect.h) {
                             const idx = (ly * this.width + lx) * 4;
-                            data[idx + 3] = 0; 
+                            data[idx + 3] = 0; // Transparent
                         }
                     }
                 }
@@ -645,6 +653,7 @@
                 let minX = w, minY = h, maxX = 0, maxY = 0;
                 let found = false;
 
+                // Find bounds of non-transparent pixels
                 for (let y = 0; y < h; y++) {
                     for (let x = 0; x < w; x++) {
                         const alpha = data[(y * w + x) * 4 + 3];
@@ -658,12 +667,13 @@
                     }
                 }
 
-                if (!found) return;
+                if (!found) return; // Empty layer
 
                 const trimW = maxX - minX + 1;
                 const trimH = maxY - minY + 1;
                 const trimmedData = this.ctx.getImageData(minX, minY, trimW, trimH);
 
+                // Update Position to visually stay in same place
                 const oldCX = w / 2;
                 const oldCY = h / 2;
                 const newCX = minX + trimW / 2;
@@ -677,6 +687,7 @@
                 this.x += dx * cos - dy * sin;
                 this.y += dx * sin + dy * cos;
 
+                // Resize internal canvas
                 this.canvas.width = trimW;
                 this.canvas.height = trimH;
                 this.width = trimW;
@@ -816,8 +827,9 @@
                 this.canvas = document.getElementById('main-canvas');
                 this.ctx = this.canvas.getContext('2d');
                 this.layers = [];
+                this.backgroundImage = null; // New Background Layer Slot
                 this.history = [];
-                this.historyMax = 15; // Limit to save memory
+                this.historyMax = 15; 
                 this.activeLayer = null;
                 this.tool = 'move'; 
                 this.zoom = 1;
@@ -840,13 +852,9 @@
             }
 
             saveState() {
-                // If the last state is identical (simple check), don't push? 
-                // Deep equality is expensive. We just rely on user action triggers.
-                
                 const state = {
                     bgColor: this.bgColor,
-                    width: this.canvas.width,
-                    height: this.canvas.height,
+                    bgImage: this.backgroundImage, // Store reference to current bg image object
                     layers: this.layers.map(l => l.serialize())
                 };
 
@@ -869,16 +877,9 @@
 
             restoreState(state) {
                 this.bgColor = state.bgColor;
+                this.backgroundImage = state.bgImage; // Restore bg
                 document.getElementById('bg-color').value = this.bgColor;
                 
-                // Restore Canvas Size
-                if(state.width) {
-                    this.canvas.width = state.width;
-                    this.canvas.height = state.height;
-                    this.initRulers(); // Redraw rulers for new size
-                    document.getElementById('canvas-dims').innerText = `${state.width}x${state.height} px`;
-                }
-
                 this.layers = state.layers.map(data => {
                     let layer;
                     if (data.type === 'image') {
@@ -970,9 +971,9 @@
             }
 
             initRulers() {
-                // Rulers based on current canvas size
-                const w = this.canvas.width;
-                const h = this.canvas.height;
+                // Fixed 1080x1080
+                const w = 1080;
+                const h = 1080;
                 const pxPerCm = 37.8;
                 const totalCmW = w / pxPerCm;
                 const totalCmH = h / pxPerCm;
@@ -1038,7 +1039,6 @@
                 
                 if(target.id === 'prop-opacity') this.activeLayer.opacity = target.value;
                 if(target.id === 'prop-text-content' && this.activeLayer.type === 'text') {
-                    // Update text, if empty keep layer alive
                     this.activeLayer.text = target.value; 
                     this.activeLayer.measureDimensions();
                 }
@@ -1093,6 +1093,27 @@
                     };
                     reader.readAsDataURL(input.files[0]);
                 }
+            }
+
+            handleBackgroundUpload(input) {
+                if (input.files && input.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            this.saveState();
+                            this.backgroundImage = img;
+                            input.value = '';
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(input.files[0]);
+                }
+            }
+
+            clearBackground() {
+                this.saveState();
+                this.backgroundImage = null;
             }
 
             addTextLayer() {
@@ -1329,13 +1350,16 @@
                 
                 if (this.tool === 'crop' && this.isSelecting) {
                     this.isSelecting = false;
-                    if(this.selectionRect && this.selectionRect.w > 10 && this.selectionRect.h > 10) {
+                    // Apply crop ONLY to active layer if it's an image
+                    if(this.selectionRect && this.selectionRect.w > 10 && this.selectionRect.h > 10 && this.activeLayer && this.activeLayer.type === 'image') {
                         this.saveState();
-                        // Crop Canvas
-                        this.cropCanvas(this.selectionRect);
+                        this.activeLayer.cropOutside(this.selectionRect);
                         this.saveState();
                         this.selectionRect = null;
                         this.setTool('move');
+                    } else {
+                        // Cancel if invalid selection or no layer
+                        this.selectionRect = null;
                     }
                 }
 
@@ -1345,31 +1369,7 @@
                 }
             }
             
-            cropCanvas(rect) {
-                // rect is in current canvas coords
-                // Create temp canvas with crop dims
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = rect.w;
-                tempCanvas.height = rect.h;
-                const tempCtx = tempCanvas.getContext('2d');
-                
-                // We need to shift all layers so that rect.x, rect.y becomes 0,0
-                // And we update canvas size
-                
-                // 1. Update layers pos
-                this.layers.forEach(l => {
-                    l.x -= rect.x;
-                    l.y -= rect.y;
-                });
-                
-                // 2. Update Canvas Size
-                this.canvas.width = rect.w;
-                this.canvas.height = rect.h;
-                document.getElementById('canvas-dims').innerText = `${Math.round(rect.w)}x${Math.round(rect.h)} px`;
-                
-                // 3. Redraw rulers
-                this.initRulers();
-            }
+            // Removed cropCanvas(rect) method as requested to keep 1080x1080 fixed
 
             checkRotationHandle(pos) {
                 const l = this.activeLayer;
@@ -1501,8 +1501,21 @@
             }
 
             loop() {
-                this.ctx.fillStyle = this.bgColor;
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                // 1. Background
+                if(this.backgroundImage) {
+                    // Calculate "cover" scale
+                    const ratio = Math.max(this.canvas.width / this.backgroundImage.width, this.canvas.height / this.backgroundImage.height);
+                    const cw = this.backgroundImage.width * ratio;
+                    const ch = this.backgroundImage.height * ratio;
+                    const cx = (this.canvas.width - cw) / 2;
+                    const cy = (this.canvas.height - ch) / 2;
+                    this.ctx.drawImage(this.backgroundImage, cx, cy, cw, ch);
+                } else {
+                    this.ctx.fillStyle = this.bgColor;
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+
+                // 2. Layers
                 this.layers.forEach(layer => layer.draw(this.ctx));
                 this.drawUI(this.ctx);
                 requestAnimationFrame(this.loop.bind(this));
@@ -1521,9 +1534,19 @@
                 if(wasSelecting) this.selectionRect = null;
 
                 this.setActiveLayer(null);
-                this.ctx.fillStyle = this.bgColor;
-                // Draw Full Canvas
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Force Redraw for clean export
+                if(this.backgroundImage) {
+                    const ratio = Math.max(this.canvas.width / this.backgroundImage.width, this.canvas.height / this.backgroundImage.height);
+                    const cw = this.backgroundImage.width * ratio;
+                    const ch = this.backgroundImage.height * ratio;
+                    const cx = (this.canvas.width - cw) / 2;
+                    const cy = (this.canvas.height - ch) / 2;
+                    this.ctx.drawImage(this.backgroundImage, cx, cy, cw, ch);
+                } else {
+                    this.ctx.fillStyle = this.bgColor;
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
                 this.layers.forEach(layer => layer.draw(this.ctx));
                 
                 const format = document.getElementById('export-format').value;
@@ -1542,8 +1565,19 @@
                 if(!isOpen) {
                     const prevSelection = this.activeLayer;
                     this.setActiveLayer(null);
-                    this.ctx.fillStyle = this.bgColor;
-                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Render for preview
+                    if(this.backgroundImage) {
+                        const ratio = Math.max(this.canvas.width / this.backgroundImage.width, this.canvas.height / this.backgroundImage.height);
+                        const cw = this.backgroundImage.width * ratio;
+                        const ch = this.backgroundImage.height * ratio;
+                        const cx = (this.canvas.width - cw) / 2;
+                        const cy = (this.canvas.height - ch) / 2;
+                        this.ctx.drawImage(this.backgroundImage, cx, cy, cw, ch);
+                    } else {
+                        this.ctx.fillStyle = this.bgColor;
+                        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    }
                     this.layers.forEach(layer => layer.draw(this.ctx));
                     
                     document.getElementById('preview-img').src = this.canvas.toDataURL();
@@ -1590,3 +1624,4 @@
     </script>
 </body>
 </html>
+
