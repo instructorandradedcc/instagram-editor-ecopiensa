@@ -6,6 +6,8 @@
     <title>Ecopiensa Editor | Instagram Composer</title>
     <!-- Iconos Lucide -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-dark: #121212;
@@ -242,6 +244,9 @@
         <button class="tool-btn" onclick="app.setTool('magic-wand')" id="tool-magic-wand">
             <i data-lucide="wand-2"></i><span class="tool-tooltip">Varita Mágica (W)</span>
         </button>
+        <button class="tool-btn" onclick="app.setTool('fill')" id="tool-fill">
+            <i data-lucide="paint-bucket"></i><span class="tool-tooltip">Relleno (F)</span>
+        </button>
         <input type="file" id="file-upload" accept="image/*" hidden onchange="app.handleImageUpload(this)">
     </aside>
 
@@ -282,6 +287,10 @@
                             <option value="Verdana">Verdana</option>
                             <option value="Impact">Impact</option>
                             <option value="Brush Script MT">Brush Script</option>
+                            <option disabled>───────</option>
+                            <option value="Roboto Slab">Slab Serif</option>
+                            <option value="Roboto Slab|uppercase">Slab Serif (Mayúsculas)</option>
+                            <option value="Roboto Slab|lowercase">Slab Serif (Minúsculas)</option>
                         </select>
                     </div>
                     <div class="control-group">
@@ -309,13 +318,22 @@
             <!-- Tool Specific Settings -->
             <div id="tool-settings" class="panel-section" style="display:none; border-top: 1px solid #333; padding-top: 20px;">
                 <div class="panel-title">Ajustes de Herramienta</div>
-                <div id="eraser-settings">
+                
+                <div id="eraser-settings" style="display:none;">
                     <label class="control-label">Tamaño Borrador: <span id="eraser-size-val">20</span>px</label>
                     <input type="range" id="eraser-size" min="5" max="100" value="20">
                 </div>
+                
                 <div id="wand-settings" style="display:none;">
                     <label class="control-label">Tolerancia: <span id="wand-tol-val">30</span></label>
                     <input type="range" id="wand-tol" min="0" max="100" value="30">
+                </div>
+
+                <div id="fill-settings" style="display:none;">
+                    <label class="control-label">Color de Relleno</label>
+                    <input type="color" id="fill-color" value="#00ff9d" style="height: 40px; width: 100%; margin-bottom: 10px;">
+                    <label class="control-label">Tolerancia: <span id="fill-tol-val">30</span></label>
+                    <input type="range" id="fill-tol" min="0" max="100" value="30">
                 </div>
             </div>
         </div>
@@ -446,7 +464,7 @@
 
             serialize() {
                 const base = super.serialize();
-                // Important: We need a copy of the pixel data for Undo to work with eraser
+                // Important: We need a copy of the pixel data for Undo to work with eraser/fill
                 return {
                     ...base,
                     originalImage: this.originalImage,
@@ -481,6 +499,18 @@
             }
 
             magicWand(x, y, tolerance) {
+                this._performPixelOperation(x, y, tolerance, 'erase');
+            }
+
+            floodFill(x, y, colorHex, tolerance) {
+                // Convert hex to rgb
+                const r = parseInt(colorHex.slice(1, 3), 16);
+                const g = parseInt(colorHex.slice(3, 5), 16);
+                const b = parseInt(colorHex.slice(5, 7), 16);
+                this._performPixelOperation(x, y, tolerance, 'fill', {r, g, b});
+            }
+
+            _performPixelOperation(x, y, tolerance, mode, fillColor = null) {
                 const dx = x - this.x;
                 const dy = y - this.y;
                 const cos = Math.cos(-this.rotation);
@@ -492,17 +522,54 @@
 
                 const imageData = this.ctx.getImageData(0, 0, this.width, this.height);
                 const data = imageData.data;
-                const targetIdx = (localY * this.width + localX) * 4;
-                const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2], targetA = data[targetIdx+3];
+                const w = this.width;
+                const h = this.height;
 
-                if(targetA === 0) return; 
+                const targetIdx = (localY * w + localX) * 4;
+                const tr = data[targetIdx], tg = data[targetIdx+1], tb = data[targetIdx+2], ta = data[targetIdx+3];
 
-                for(let i = 0; i < data.length; i += 4) {
-                    if (data[i+3] === 0) continue;
-                    const r = data[i], g = data[i+1], b = data[i+2];
-                    const diff = Math.abs(r - targetR) + Math.abs(g - targetG) + Math.abs(b - targetB);
-                    if (diff <= tolerance * 3) data[i+3] = 0;
+                // If opacity is 0 and we are erasing, nothing to do
+                if(ta === 0 && mode === 'erase') return;
+                // If filling with same color, nothing to do
+                if(mode === 'fill' && Math.abs(tr-fillColor.r) < 5 && Math.abs(tg-fillColor.g) < 5 && Math.abs(tb-fillColor.b) < 5) return;
+
+                // Stack-based flood fill
+                const stack = [[localX, localY]];
+                const seen = new Uint8Array(w * h); // track visited pixels
+                
+                while(stack.length > 0) {
+                    const [cx, cy] = stack.pop();
+                    const idx = (cy * w + cx) * 4;
+
+                    if(seen[cy * w + cx]) continue;
+                    
+                    const cr = data[idx], cg = data[idx+1], cb = data[idx+2], ca = data[idx+3];
+                    
+                    // Check difference
+                    const diff = Math.abs(cr - tr) + Math.abs(cg - tg) + Math.abs(cb - tb) + Math.abs(ca - ta);
+                    
+                    // Simple tolerance check
+                    if (diff <= tolerance * 4) {
+                        seen[cy * w + cx] = 1; // Mark visited
+
+                        // Perform Action
+                        if(mode === 'erase') {
+                            data[idx+3] = 0; // Set alpha to 0
+                        } else if (mode === 'fill') {
+                            data[idx] = fillColor.r;
+                            data[idx+1] = fillColor.g;
+                            data[idx+2] = fillColor.b;
+                            data[idx+3] = 255; // Ensure fully opaque
+                        }
+
+                        // Add neighbors
+                        if(cx > 0) stack.push([cx-1, cy]);
+                        if(cx < w-1) stack.push([cx+1, cy]);
+                        if(cy > 0) stack.push([cx, cy-1]);
+                        if(cy < h-1) stack.push([cx, cy+1]);
+                    }
                 }
+
                 this.ctx.putImageData(imageData, 0, 0);
             }
         }
@@ -514,6 +581,7 @@
                 this.fontFamily = 'Arial';
                 this.fontSize = 60;
                 this.color = '#ffffff';
+                this.textTransform = 'none'; // none, uppercase, lowercase
                 this.measureDimensions();
             }
 
@@ -524,14 +592,21 @@
                     text: this.text,
                     fontFamily: this.fontFamily,
                     fontSize: this.fontSize,
-                    color: this.color
+                    color: this.color,
+                    textTransform: this.textTransform
                 };
+            }
+
+            getRenderText() {
+                if (this.textTransform === 'uppercase') return this.text.toUpperCase();
+                if (this.textTransform === 'lowercase') return this.text.toLowerCase();
+                return this.text;
             }
 
             measureDimensions() {
                 const ctx = document.createElement('canvas').getContext('2d');
                 ctx.font = `${this.fontSize}px ${this.fontFamily}`;
-                const metrics = ctx.measureText(this.text);
+                const metrics = ctx.measureText(this.getRenderText());
                 this.width = metrics.width;
                 this.height = this.fontSize; 
             }
@@ -546,7 +621,7 @@
                 ctx.fillStyle = this.color;
                 ctx.textBaseline = 'middle';
                 ctx.textAlign = 'center';
-                ctx.fillText(this.text, 0, 0);
+                ctx.fillText(this.getRenderText(), 0, 0);
                 ctx.restore();
             }
         }
@@ -621,6 +696,7 @@
                         layer.fontFamily = data.fontFamily;
                         layer.fontSize = data.fontSize;
                         layer.color = data.color;
+                        layer.textTransform = data.textTransform || 'none';
                     }
                     // Restore transform props
                     layer.x = data.x;
@@ -705,6 +781,7 @@
                     }
                     if (e.key === 'v') this.setTool('move');
                     if (e.key === 'e') this.setTool('eraser');
+                    if (e.key === 'f') this.setTool('fill');
                 });
             }
 
@@ -718,7 +795,10 @@
                     this.activeLayer.measureDimensions();
                 }
                 if(target.id === 'prop-font' && this.activeLayer.type === 'text') {
-                    this.activeLayer.fontFamily = target.value;
+                    // Split value to check for transform
+                    const [family, transform] = target.value.split('|');
+                    this.activeLayer.fontFamily = family;
+                    this.activeLayer.textTransform = transform || 'none';
                     this.activeLayer.measureDimensions();
                 }
                 if(target.id === 'prop-color' && this.activeLayer.type === 'text') {
@@ -801,13 +881,17 @@
                 const btn = document.getElementById(`tool-${name}`);
                 if(btn) btn.classList.add('active');
                 
+                // Toggle settings visibility
                 const toolSettings = document.getElementById('tool-settings');
                 const eraserSet = document.getElementById('eraser-settings');
                 const wandSet = document.getElementById('wand-settings');
+                const fillSet = document.getElementById('fill-settings');
                 
-                toolSettings.style.display = (name === 'eraser' || name === 'magic-wand') ? 'block' : 'none';
+                toolSettings.style.display = (name === 'eraser' || name === 'magic-wand' || name === 'fill') ? 'block' : 'none';
+                
                 eraserSet.style.display = name === 'eraser' ? 'block' : 'none';
                 wandSet.style.display = name === 'magic-wand' ? 'block' : 'none';
+                fillSet.style.display = name === 'fill' ? 'block' : 'none';
             }
             
             setZoom(delta) {
@@ -836,7 +920,20 @@
                 if(this.activeLayer.type === 'text') {
                     textControls.style.display = 'block';
                     document.getElementById('prop-text-content').value = this.activeLayer.text;
-                    document.getElementById('prop-font').value = this.activeLayer.fontFamily;
+                    // Reconstruct the value for the dropdown (Family|Transform)
+                    let val = this.activeLayer.fontFamily;
+                    if (this.activeLayer.textTransform && this.activeLayer.textTransform !== 'none') {
+                        val += '|' + this.activeLayer.textTransform;
+                    }
+                    
+                    // Select the option, defaulting to just the font family if exact match fails
+                    const select = document.getElementById('prop-font');
+                    if ([...select.options].some(o => o.value === val)) {
+                        select.value = val;
+                    } else {
+                        select.value = this.activeLayer.fontFamily;
+                    }
+
                     document.getElementById('prop-color').value = this.activeLayer.color;
                 } else {
                     textControls.style.display = 'none';
@@ -892,6 +989,12 @@
                         const tol = parseInt(document.getElementById('wand-tol').value);
                         this.activeLayer.magicWand(pos.x, pos.y, tol);
                         this.saveState(); // Save after wand
+                    } else if (this.tool === 'fill') {
+                        this.saveState(); // Save before fill
+                        const tol = parseInt(document.getElementById('fill-tol').value);
+                        const color = document.getElementById('fill-color').value;
+                        this.activeLayer.floodFill(pos.x, pos.y, color, tol);
+                        this.saveState();
                     }
                 }
             }
@@ -1093,6 +1196,9 @@
         });
         document.getElementById('wand-tol').addEventListener('input', (e) => {
             document.getElementById('wand-tol-val').innerText = e.target.value;
+        });
+        document.getElementById('fill-tol').addEventListener('input', (e) => {
+            document.getElementById('fill-tol-val').innerText = e.target.value;
         });
 
     </script>
