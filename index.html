@@ -1501,24 +1501,38 @@
                 // Safe Zone (Guides)
                 if (this.showSafeZone) {
                     ctx.save();
-                    const margin = 60; // Margin for text/logos (Safe Zone)
-
+                    
                     if (this.format === 'square') {
-                        // Square Mode: Inner Margin
-                        ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
-                        ctx.beginPath();
-                        ctx.rect(0, 0, cw, ch);
-                        ctx.rect(cw - margin, margin, -(cw - margin*2), ch - margin*2); 
-                        ctx.fill('evenodd');
-
-                        ctx.strokeStyle = '#ff0000'; // Bright Red
+                        // Square Mode (1080x1080)
+                        
+                        // 1. Vertical 4:5 Crop Simulation (Side Cuts)
+                        // If this square was cropped to 4:5 vertical:
+                        // Width = 1080 * 4/5 = 864. Margin = (1080-864)/2 = 108.
+                        const cropW = 108;
+                        
+                        // Darken Sides (Danger Zone for Vertical Crop)
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; 
+                        ctx.fillRect(0, 0, cropW, ch); // Left
+                        ctx.fillRect(cw - cropW, 0, cropW, ch); // Right
+                        
+                        // Outline the Vertical Safe Area (Center)
+                        ctx.strokeStyle = '#00ffff'; // Cyan for Vertical View within Square
                         ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(cropW, 0, cw - cropW*2, ch);
+                        
+                        ctx.fillStyle = '#00ffff';
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.fillText("VISUALIZACIÓN VERTICAL (4:5)", cropW + 10, 30);
+
+                        // 2. Standard Safe Margins (Inner)
+                        const margin = 60;
+                        ctx.strokeStyle = '#ff00ff'; // Magenta
                         ctx.setLineDash([8, 8]);
                         ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
                         
-                        ctx.fillStyle = '#ff0000';
-                        ctx.font = 'bold 14px sans-serif';
-                        ctx.fillText("ZONA SEGURA (MÁRGENES)", margin + 10, margin - 10);
+                        ctx.fillStyle = '#ff00ff';
+                        ctx.fillText("ZONA SEGURA TEXTO", margin + 10, margin + 20);
                         
                     } else if (this.format === 'portrait') {
                         // Portrait Mode: Top/Bottom Crops
@@ -1529,23 +1543,23 @@
                         ctx.fillRect(0, 0, cw, cropH); 
                         ctx.fillRect(0, ch - cropH, cw, cropH); 
                         
-                        // 2. Outline The Profile Square (1080x1080 Center)
-                        ctx.strokeStyle = '#00ffff'; // Cyan for Grid Cutoff
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([5, 5]);
+                        // 2. Outline The Profile Square (1080x1080 Center) - RED AND THICK
+                        ctx.strokeStyle = '#ff0000'; // RED
+                        ctx.lineWidth = 4; // THICKER
+                        ctx.setLineDash([]); // SOLID LINE
                         ctx.strokeRect(0, cropH, cw, ch - cropH*2);
 
                         // 3. Draw Inner Safe Zone (Text Safety) relative to the Square
-                        // The square starts at y = cropH.
-                        // We want margins inside that square.
+                        const margin = 60;
                         ctx.strokeStyle = '#ff00ff'; // Magenta for Text Safe Zone
+                        ctx.lineWidth = 1;
                         ctx.setLineDash([8, 8]);
                         ctx.strokeRect(margin, cropH + margin, cw - margin*2, (ch - cropH*2) - margin*2);
 
                         // Text indicators
-                        ctx.fillStyle = '#00ffff';
-                        ctx.font = 'bold 12px sans-serif';
-                        ctx.fillText("LÍMITE PERFIL (GRID)", 10, cropH - 10);
+                        ctx.fillStyle = '#ff0000';
+                        ctx.font = 'bold 14px sans-serif';
+                        ctx.fillText("LÍMITE PERFIL (1:1)", 10, cropH - 10);
                         
                         ctx.fillStyle = '#ff00ff';
                         ctx.fillText("ZONA SEGURA TEXTO", margin + 10, cropH + margin + 20);
@@ -1785,4 +1799,5 @@
     </script>
 </body>
 </html>
+
 
