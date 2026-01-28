@@ -1501,10 +1501,10 @@
                 // Safe Zone (Guides)
                 if (this.showSafeZone) {
                     ctx.save();
-                    
+                    const margin = 60; // Margin for text/logos (Safe Zone)
+
                     if (this.format === 'square') {
                         // Square Mode: Inner Margin
-                        const margin = 60;
                         ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
                         ctx.beginPath();
                         ctx.rect(0, 0, cw, ch);
@@ -1524,22 +1524,31 @@
                         // Portrait Mode: Top/Bottom Crops
                         const cropH = 135; // 135px top and bottom
                         
-                        // Darken Top and Bottom
-                        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-                        ctx.fillRect(0, 0, cw, cropH); // Top danger zone
-                        ctx.fillRect(0, ch - cropH, cw, cropH); // Bottom danger zone
+                        // 1. Darken Top and Bottom (Danger Zone for Profile)
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Darker for better contrast
+                        ctx.fillRect(0, 0, cw, cropH); 
+                        ctx.fillRect(0, ch - cropH, cw, cropH); 
                         
-                        // Outline Safe Zone (Center Square)
-                        ctx.strokeStyle = '#ff0000';
+                        // 2. Outline The Profile Square (1080x1080 Center)
+                        ctx.strokeStyle = '#00ffff'; // Cyan for Grid Cutoff
                         ctx.lineWidth = 2;
-                        ctx.setLineDash([8, 8]);
+                        ctx.setLineDash([5, 5]);
                         ctx.strokeRect(0, cropH, cw, ch - cropH*2);
-                        
+
+                        // 3. Draw Inner Safe Zone (Text Safety) relative to the Square
+                        // The square starts at y = cropH.
+                        // We want margins inside that square.
+                        ctx.strokeStyle = '#ff00ff'; // Magenta for Text Safe Zone
+                        ctx.setLineDash([8, 8]);
+                        ctx.strokeRect(margin, cropH + margin, cw - margin*2, (ch - cropH*2) - margin*2);
+
                         // Text indicators
-                        ctx.fillStyle = '#ff0000';
-                        ctx.font = 'bold 14px sans-serif';
-                        ctx.fillText("SE RECORTA EN PERFIL", 10, 30);
-                        ctx.fillText("ZONA VISIBLE EN PERFIL (1:1)", 10, cropH + 20);
+                        ctx.fillStyle = '#00ffff';
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.fillText("LÍMITE PERFIL (GRID)", 10, cropH - 10);
+                        
+                        ctx.fillStyle = '#ff00ff';
+                        ctx.fillText("ZONA SEGURA TEXTO", margin + 10, cropH + margin + 20);
                     }
                     
                     ctx.restore();
